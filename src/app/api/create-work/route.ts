@@ -108,9 +108,9 @@ import mongoose from "mongoose";
 import { v2 as cloudinary } from "cloudinary";
 import redlock from "@/lib/redlock";
 
-interface Params {
-  params: { adminid: string };
-}
+// interface Params {
+//   params: { adminid: string };
+// }
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -123,7 +123,7 @@ interface CloudinaryUploadResponse {
   secure_url: string;
 }
 
-export async function POST(req: Request, { params }: Params) {
+export async function POST(req: Request) {
   await dbConnect();
 
   const session = await getServerSession(authOptions);
@@ -143,7 +143,7 @@ export async function POST(req: Request, { params }: Params) {
 
   try {
     // Try to acquire lock for 30s
-    const lock = await redlock.acquire([lockKey], 30_000);
+    const lock = await redlock.acquire([lockKey], 10_000);
 
     try {
       const formData = await req.formData();
@@ -171,7 +171,7 @@ export async function POST(req: Request, { params }: Params) {
       const uploadResult = await new Promise<CloudinaryUploadResponse>(
         (resolve, reject) => {
           const uploadStream = cloudinary.uploader.upload_stream(
-            { folder: "Image-prompt works", resource_type: "raw" },
+            { folder: "Image-prompt works", resource_type: "image" },
             (error, result) => {
               if (error) reject(error);
               else resolve(result as CloudinaryUploadResponse);
@@ -202,6 +202,7 @@ export async function POST(req: Request, { params }: Params) {
     }
   } catch (err) {
     // If lock is already held by another request
+    console.log("Redlock error : ",err);
     return Response.json(
       { success: false, message: "Another upload is in progress. Try again later." },
       { status: 429 }

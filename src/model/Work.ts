@@ -14,4 +14,6 @@ const workSchema = new mongoose.Schema<WorkDocument>({
   imageUrl: { type: String, required: true }
 }, { timestamps: true });
 
-export default mongoose.models.Work || mongoose.model("Work", workSchema);
+const Work = mongoose.models.Work || mongoose.model("Work", workSchema);
+
+export default Work;
