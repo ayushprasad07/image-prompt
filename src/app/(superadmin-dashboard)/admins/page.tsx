@@ -2,6 +2,7 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react'
 import { toast } from 'sonner';
+import Link from "next/link";
 import {
   Pagination,
   PaginationContent,
@@ -49,7 +50,9 @@ const Admins = () => {
   return (
     <div className='py-10 pb-20 md:p-20 w-full'>
       <div className='w-full px-5'>
-        <h1 className='bg-opacity-50 bg-gradient-to-r from-neutral-600 to-neutral-900 bg-clip-text text-3xl font-bold text-transparent md:text-5xl'>Admins</h1>
+        <h1 className='bg-opacity-50 bg-gradient-to-r from-neutral-600 to-neutral-900 bg-clip-text text-3xl font-bold text-transparent md:text-5xl'>
+          Admins
+        </h1>
       </div>
       <hr className='my-5'/>
 
@@ -58,67 +61,52 @@ const Admins = () => {
         {loading ? (
           <p>Loading admins...</p>
         ) : admins.length > 0 ? (
-            <div className='grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6'>
-                {admins.map((admin, index) => (
-                    <div key={admin._id || index} className="group relative">
-                    <div className="bg-white/90 backdrop-blur-sm border border-gray-200 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 hover:bg-white">
-                        {/* Header with Avatar */}
-                        <div className="flex items-center space-x-3 mb-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                            {admin.username?.charAt(0).toUpperCase() || 'A'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-gray-900 truncate text-lg">
-                            {admin.username || 'Admin User'}
-                            </p>
-                            <p className="text-sm text-gray-600">Administrator</p>
-                        </div>
-                        </div>
-
-                        {/* Status Badge */}
-                        {/* <div className="flex items-center justify-between mb-4">
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            <div className="w-2 h-2 bg-green-400 rounded-full mr-1"></div>
-                            Active
-                        </span>
-                        <div className="flex items-center text-gray-400 group-hover:text-gray-600 transition-colors duration-200">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                            </svg>
-                        </div>
-                        </div> */}
-
-                        {/* Stats */}
-                        <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div className="text-center p-3 bg-gray-50 rounded-xl">
-                            <p className="text-2xl font-bold text-blue-600">24</p>
-                            <p className="text-xs text-gray-600">Tasks</p>
-                        </div>
-                        <div className="text-center p-3 bg-gray-50 rounded-xl">
-                            <p className="text-2xl font-bold text-green-600">98%</p>
-                            <p className="text-xs text-gray-600">Success</p>
-                        </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex space-x-2">
-                        <button className="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105">
-                            View Details
-                        </button>
-                        <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-all duration-200 hover:scale-105">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                        </button>
-                        </div>
-
-                        {/* Decorative Element */}
-                        <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-blue-500/10 to-purple-600/10 rounded-bl-2xl rounded-tr-2xl"></div>
+          <div className='grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6'>
+            {admins.map((admin, index) => (
+              <div key={admin._id || index} className="group relative p-4">
+                <div className="bg-white/90 backdrop-blur-sm border border-gray-200 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 hover:bg-white">
+                  {/* Header with Avatar */}
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                      {admin.username?.charAt(0).toUpperCase() || 'A'}
                     </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 truncate text-lg">
+                        {admin.username || 'Admin User'}
+                      </p>
+                      <p className="text-sm text-gray-600">Administrator</p>
                     </div>
-                ))}
-            </div>
+                  </div>
 
+                  {/* Stats */}
+                  <div className="flex space-x-3 justify-center items-center mb-4">
+                    <div className="text-center p-3 bg-gray-50 rounded-xl">
+                      <p className="text-2xl font-bold text-blue-600">24</p>
+                      <p className="text-xs text-gray-600">Tasks</p>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex space-x-2">
+                    {/* View Details → navigates to /admins/[id] */}
+                    <Link href={`/admin-work/${admin._id}`} className="flex-1">
+                      <button className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105">
+                        View Details
+                      </button>
+                    </Link>
+                    {/* <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-all duration-200 hover:scale-105">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button> */}
+                  </div>
+
+                  {/* Decorative Element */}
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-blue-500/10 to-purple-600/10 rounded-bl-2xl rounded-tr-2xl"></div>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
           <p>No admins found.</p>
         )}

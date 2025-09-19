@@ -16,7 +16,7 @@ export default function RootLayout({
 }>) {
   return (
     <div>
-        <NavbarDemo/>
+        {/* <NavbarDemo/> */}
         {children}
     </div>
   );

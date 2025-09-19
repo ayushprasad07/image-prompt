@@ -7,16 +7,16 @@ import redis from "@/lib/redis";
 
 export async function GET(req: Request) {
   await dbConnect();
-  const session = await getServerSession(authOptions);
-  const user: User = session?.user as User;
+  // const session = await getServerSession(authOptions);
+  // const user: User = session?.user as User;
 
-  // ✅ Fix role check
-  if (!user || (user.role !== "superadmin" && user.role !== "admin")) {
-    return Response.json(
-      { success: false, message: "Unauthorized" },
-      { status: 401 }
-    );
-  }
+  // // ✅ Fix role check
+  // if (!user || (user.role !== "superadmin" && user.role !== "admin")) {
+  //   return Response.json(
+  //     { success: false, message: "Unauthorized" },
+  //     { status: 401 }
+  //   );
+  // }
 
   try {
     // ✅ Try Redis cache first

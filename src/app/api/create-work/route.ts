@@ -125,87 +125,66 @@ interface CloudinaryUploadResponse {
 
 export async function POST(req: Request) {
   await dbConnect();
-
   const session = await getServerSession(authOptions);
   const admin: User = session?.user as User;
 
   if (!admin || admin.role !== "admin") {
-    return Response.json(
-      { success: false, message: "Unauthorized" },
-      { status: 401 }
-    );
+    return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
   const adminid = new mongoose.Types.ObjectId(session?.user._id);
-
-  // Redis lock key for this admin
   const lockKey = `upload-lock:${adminid}`;
 
+  let lock;
   try {
-    // Try to acquire lock for 30s
-    const lock = await redlock.acquire([lockKey], 10_000);
+    lock = await redlock.acquire([lockKey], 30_000);
 
-    try {
-      const formData = await req.formData();
-      const image = formData.get("image") as File | null;
-      const prompt = formData.get("prompt") as string;
-      const categoryId = formData.get("categoryId") as string;
+    const formData = await req.formData();
+    const image = formData.get("image") as File | null;
+    const prompt = formData.get("prompt") as string;
+    const categoryId = formData.get("categoryId") as string;
 
-      if (!image || !prompt) {
-        return Response.json(
-          { success: false, message: "Please provide Image and prompt" },
-          { status: 400 }
-        );
-      }
+    if (!image || !prompt || !categoryId) {
+      return Response.json(
+        { success: false, message: "Missing required fields" },
+        { status: 400 }
+      );
+    }
 
-      if (!categoryId) {
-        return Response.json(
-          { success: false, message: "Please provide category" },
-          { status: 400 }
-        );
-      }
+    const buffer = Buffer.from(await image.arrayBuffer());
 
-      const bytes = await image.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-
-      const uploadResult = await new Promise<CloudinaryUploadResponse>(
-        (resolve, reject) => {
-          const uploadStream = cloudinary.uploader.upload_stream(
-            { folder: "Image-prompt works", resource_type: "image" },
-            (error, result) => {
-              if (error) reject(error);
-              else resolve(result as CloudinaryUploadResponse);
-            }
-          );
-          uploadStream.end(buffer);
+    const uploadResult = await new Promise<CloudinaryUploadResponse>((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        { folder: "Image-prompt works", resource_type: "image" },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result as CloudinaryUploadResponse);
         }
       );
+      uploadStream.end(buffer);
+    });
 
-      const url = uploadResult.secure_url || "";
+    await new Work({
+      adminId: adminid,
+      prompt,
+      imageUrl: uploadResult.secure_url,
+      categoryId: new mongoose.Types.ObjectId(categoryId),
+    }).save();
 
-      const work = new Work({
-        admin: adminid,
-        prompt,
-        image: url,
-        categoryId: new mongoose.Types.ObjectId(categoryId),
-      });
-
-      await work.save();
-
-      return Response.json({
-        success: true,
-        message: "Work created successfully",
-      });
-    } finally {
-      // Always release the lock
-      await lock.unlock().catch(() => {});
-    }
+    return Response.json({ success: true, message: "Work created successfully" });
   } catch (err) {
-    // If lock is already held by another request
-    console.log("Redlock error : ",err);
+    console.error("Redlock error:", err);
     return Response.json(
       { success: false, message: "Another upload is in progress. Try again later." },
       { status: 429 }
     );
+  } finally {
+    if (lock) {
+      try {
+        await redlock.release(lock);
+      } catch (releaseErr) {
+        console.error("Failed to release lock:", releaseErr);
+      }
+    }
   }
 }

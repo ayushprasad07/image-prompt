@@ -1,16 +1,14 @@
+// src/app/api/delete-work/[workid]/route.ts
 import dbConnect from "@/lib/dbConnect";
 import { getServerSession, User } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/options";
 import mongoose from "mongoose";
 import redis from "@/lib/redis";
 
-interface Params {
-  params: {
-    workid: string;
-  };
-}
-
-export async function DELETE(req: Request, { params }: Params) {
+export async function DELETE(
+  req: Request,
+  context: { params: { workid: string } }
+) {
   await dbConnect();
 
   const session = await getServerSession(authOptions);
@@ -24,21 +22,20 @@ export async function DELETE(req: Request, { params }: Params) {
   }
 
   try {
-    const workId = params.workid;
+    const workId = new mongoose.Types.ObjectId(context.params.workid);
 
-    // 🔹 Step 1: Remove from Redis immediately (fast)
+    // 🔹 Step 1: Remove from Redis immediately
     await Promise.all([
       redis.del(`work:${workId}`),
-      redis.del(`admin:works:${user._id}`), // invalidate admin’s work list
+      redis.del(`admin:works:${user._id}`),
     ]);
 
-    // 🔹 Step 2: Push delete request to a Redis queue (async DB delete)
+    // 🔹 Step 2: Queue async delete
     await redis.lpush(
       "work:delete:queue",
       JSON.stringify({ workId, userId: user._id, role: user.role })
     );
 
-    // Respond quickly without waiting for MongoDB
     return Response.json(
       { success: true, message: "Work delete queued successfully" },
       { status: 202 }

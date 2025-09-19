@@ -4,15 +4,15 @@ import { authOptions } from "../../auth/[...nextauth]/options";
 import Work from "@/model/Work";
 import mongoose from "mongoose";
 
-// /api/superadmin/work/{adminid}?page=2
+// /api/get-work-by-admin/[adminid]?page=2
 
-interface Params {
-  params: {
+interface Context {
+  params: Promise<{
     adminid: string;
-  };
+  }>;
 }
 
-export async function GET(req: Request, { params }: Params) {
+export async function GET(req: Request, context: Context) {
   await dbConnect();
 
   const session = await getServerSession(authOptions);
@@ -34,7 +34,20 @@ export async function GET(req: Request, { params }: Params) {
     const limit = 100; // fetch 100 works per call
     const skip = (page - 1) * limit;
 
-    const adminId = new mongoose.Types.ObjectId(params.adminid);
+    // ✅ Await params before accessing
+    const { adminid } = await context.params;
+
+    if (!mongoose.Types.ObjectId.isValid(adminid)) {
+      return Response.json(
+        {
+          success: false,
+          message: "Invalid admin ID",
+        },
+        { status: 400 }
+      );
+    }
+
+    const adminId = new mongoose.Types.ObjectId(adminid);
 
     const [works, total] = await Promise.all([
       Work.find({ adminId })
@@ -59,7 +72,7 @@ export async function GET(req: Request, { params }: Params) {
       { status: 200 }
     );
   } catch (error) {
-    console.log("Get work error : ", error);
+    console.error("Get work error:", error);
     return Response.json(
       {
         success: false,

@@ -1,13 +1,11 @@
+// src/app/api/update-work/[workid]/route.ts
+
 import dbConnect from "@/lib/dbConnect";
 import { getServerSession, User } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/options";
 import mongoose from "mongoose";
 import { v2 as cloudinary } from "cloudinary";
 import redis from "@/lib/redis";
-
-interface Params {
-  params: { workid: string };
-}
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -20,7 +18,11 @@ interface CloudinaryUploadResponse {
   secure_url: string;
 }
 
-export async function PUT(req: Request, { params }: Params) {
+interface Context {
+  params: Promise<{ workid: string }>;
+}
+
+export async function PUT(req: Request, context: Context) {
   await dbConnect();
 
   const session = await getServerSession(authOptions);
@@ -34,6 +36,16 @@ export async function PUT(req: Request, { params }: Params) {
   }
 
   try {
+    // ✅ Await params before using
+    const { workid } = await context.params;
+
+    if (!mongoose.Types.ObjectId.isValid(workid)) {
+      return Response.json(
+        { success: false, message: "Invalid work ID" },
+        { status: 400 }
+      );
+    }
+
     const formData = await req.formData();
     const image = formData.get("image") as File | null;
     const prompt = formData.get("prompt") as string | null;
@@ -63,17 +75,17 @@ export async function PUT(req: Request, { params }: Params) {
       updates.imageUrl = uploadResult.secure_url;
     }
 
-    // Invalidate cache before queuing
+    // 🔹 Step 1: Invalidate Redis caches
     await Promise.all([
-      redis.del(`work:${params.workid}`),
+      redis.del(`work:${workid}`),
       redis.del(`admin:works:${user._id}`),
     ]);
 
-    // Queue update job
+    // 🔹 Step 2: Queue async update job
     await redis.lpush(
       "work:update:queue",
       JSON.stringify({
-        workId: params.workid,
+        workId: workid,
         userId: user._id,
         role: user.role, // superadmin | admin
         updates,
