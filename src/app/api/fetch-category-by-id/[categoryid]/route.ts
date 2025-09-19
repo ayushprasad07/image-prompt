@@ -7,13 +7,12 @@ import redis from "@/lib/redis";
 
 export async function GET(
   req: Request,
-  context: { params: Promise<{ categoryid: string }> } // 👈 params is a Promise
+  { params }: { params: { categoryid: string } }
 ) {
   await dbConnect();
   const session = await getServerSession(authOptions);
   const user: User = session?.user as User;
 
-  // ✅ Auth check
   if (!user || (user.role !== "superadmin" && user.role !== "admin")) {
     return Response.json(
       { success: false, message: "Unauthorized" },
@@ -22,8 +21,7 @@ export async function GET(
   }
 
   try {
-    // 👇 Await params before using
-    const { categoryid } = await context.params;
+    const { categoryid } = params; // ✅ no need for await
 
     if (!categoryid) {
       return Response.json(
@@ -34,7 +32,6 @@ export async function GET(
 
     const cacheKey = `category:id:${categoryid}`;
 
-    // ✅ Try Redis first
     const cached = await redis.get(cacheKey);
     if (cached) {
       return Response.json(
@@ -43,7 +40,6 @@ export async function GET(
       );
     }
 
-    // ✅ Fetch from MongoDB
     const category = await Category.findById(categoryid);
 
     if (!category) {
@@ -53,7 +49,6 @@ export async function GET(
       );
     }
 
-    // ✅ Cache result for 10 min
     await redis.setex(cacheKey, 600, JSON.stringify(category));
 
     return Response.json(

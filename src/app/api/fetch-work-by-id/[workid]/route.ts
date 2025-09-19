@@ -1,3 +1,5 @@
+// src/app/api/fetch-work-by-id/[workid]/route.ts
+
 import dbConnect from "@/lib/dbConnect";
 import { getServerSession, User } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/options";
@@ -7,7 +9,7 @@ import redis from "@/lib/redis";
 
 export async function GET(
   req: Request,
-  context: { params: Promise<{ workid: string }> } // 👈 params is Promise
+  { params }: { params: { workid: string } }
 ) {
   await dbConnect();
 
@@ -23,8 +25,7 @@ export async function GET(
   }
 
   try {
-    // ✅ Await params
-    const { workid } = await context.params;
+    const { workid } = params; // ✅ no await needed
 
     if (!mongoose.Types.ObjectId.isValid(workid)) {
       return Response.json(

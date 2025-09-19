@@ -1,3 +1,5 @@
+// src/app/api/get-work-by-admin/[adminid]/route.ts
+
 import dbConnect from "@/lib/dbConnect";
 import { getServerSession, User } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/options";
@@ -6,13 +8,10 @@ import mongoose from "mongoose";
 
 // /api/get-work-by-admin/[adminid]?page=2
 
-interface Context {
-  params: Promise<{
-    adminid: string;
-  }>;
-}
-
-export async function GET(req: Request, context: Context) {
+export async function GET(
+  req: Request,
+  { params }: { params: { adminid: string } }
+) {
   await dbConnect();
 
   const session = await getServerSession(authOptions);
@@ -34,8 +33,7 @@ export async function GET(req: Request, context: Context) {
     const limit = 100; // fetch 100 works per call
     const skip = (page - 1) * limit;
 
-    // ✅ Await params before accessing
-    const { adminid } = await context.params;
+    const { adminid } = params; // ✅ no await here
 
     if (!mongoose.Types.ObjectId.isValid(adminid)) {
       return Response.json(

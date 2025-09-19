@@ -18,11 +18,10 @@ interface CloudinaryUploadResponse {
   secure_url: string;
 }
 
-interface Context {
-  params: Promise<{ workid: string }>;
-}
-
-export async function PUT(req: Request, context: Context) {
+export async function PUT(
+  req: Request,
+  { params }: { params: { workid: string } }
+) {
   await dbConnect();
 
   const session = await getServerSession(authOptions);
@@ -36,8 +35,7 @@ export async function PUT(req: Request, context: Context) {
   }
 
   try {
-    // ✅ Await params before using
-    const { workid } = await context.params;
+    const { workid } = params; // ✅ no await needed
 
     if (!mongoose.Types.ObjectId.isValid(workid)) {
       return Response.json(
