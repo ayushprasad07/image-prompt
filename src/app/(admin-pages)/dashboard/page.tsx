@@ -115,7 +115,7 @@ const AdminWorks = () => {
       fetchCategories(works.map((w: Work) => w.categoryId))
 
       toast.success(message)
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error fetching works:", err)
       toast.error("Failed to fetch works")
     } finally {
@@ -175,7 +175,7 @@ const AdminWorks = () => {
       } else {
         toast.error(res.data.message || "Failed to delete work")
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Delete work error:", err)
       toast.error("Something went wrong while deleting")
     } finally {
