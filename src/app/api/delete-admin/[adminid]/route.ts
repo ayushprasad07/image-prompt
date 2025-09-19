@@ -7,11 +7,10 @@ import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 
 // /api/admins/[adminid]
-interface Params {
-  params: { adminid: string };
-}
-
-export async function DELETE(req: Request, { params }: Params) {
+export async function DELETE(
+  req: Request,
+  { params }: { params: { adminid: string } } // ✅ inline type
+) {
   await dbConnect();
 
   const session = await getServerSession(authOptions);
