@@ -4,13 +4,13 @@ import { authOptions } from "../../auth/[...nextauth]/options";
 import Admin from "@/model/Admin";
 import redis from "@/lib/redis";
 import mongoose from "mongoose";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-// /api/admins/[adminid]
+// /api/delete-admin/[adminid]
 export async function DELETE(
-  req: Request,
-  { params }: { params: { adminid: string } } // ✅ inline type
-) {
+  request: NextRequest,
+  context: { params: { adminid: string } }
+): Promise<NextResponse> {
   await dbConnect();
 
   const session = await getServerSession(authOptions);
@@ -24,16 +24,16 @@ export async function DELETE(
   }
 
   try {
-    if (!mongoose.Types.ObjectId.isValid(params.adminid)) {
+    const { adminid } = context.params;
+
+    if (!mongoose.Types.ObjectId.isValid(adminid)) {
       return NextResponse.json(
         { success: false, message: "Invalid admin ID" },
         { status: 400 }
       );
     }
 
-    const adminId = new mongoose.Types.ObjectId(params.adminid);
-    const admin = await Admin.findById(adminId);
-
+    const admin = await Admin.findById(adminid);
     if (!admin) {
       return NextResponse.json(
         { success: false, message: "Admin not found" },
@@ -41,9 +41,9 @@ export async function DELETE(
       );
     }
 
-    await Admin.findByIdAndDelete(adminId);
+    await Admin.findByIdAndDelete(adminid);
 
-    // Invalidate Redis cache for admin lists
+    // Invalidate Redis cache
     const keys = await redis.keys("admins:*");
     if (keys.length > 0) {
       await redis.del(keys);
@@ -54,6 +54,7 @@ export async function DELETE(
       { status: 200 }
     );
   } catch (error) {
+    console.error("❌ Delete admin error:", error);
     return NextResponse.json(
       { success: false, message: "Something went wrong" },
       { status: 500 }
