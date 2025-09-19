@@ -49,11 +49,18 @@ const Admins = () => {
 
   return (
     <div className='py-10 pb-20 md:p-20 w-full'>
-      <div className='w-full px-5'>
-        <h1 className='bg-opacity-50 bg-gradient-to-r from-neutral-600 to-neutral-900 bg-clip-text text-3xl font-bold text-transparent md:text-5xl'>
-          Admins
-        </h1>
-      </div>
+      <div className='w-full px-5 mb-8'>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div>
+              <h1 className='bg-gradient-to-r from-slate-800 via-blue-600 to-indigo-600 dark:from-slate-200 dark:via-blue-400 dark:to-indigo-400 bg-clip-text text-4xl md:text-6xl font-bold text-transparent mb-4'>
+                Admin Management
+              </h1>
+              <p className="text-xl text-slate-600 dark:text-slate-400 max-w-2xl">
+                Manage your administrative team and monitor their activities
+              </p>
+            </div>
+          </div>
+        </div>
       <hr className='my-5'/>
 
       {/* Admins List */}
