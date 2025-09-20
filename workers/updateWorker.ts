@@ -1,64 +1,4 @@
-// // workers/updateWorker.ts
-// import "dotenv/config"; 
-// // dotenv.config({ path: ".env.local" }); // ensure env variables are loaded
-
-// import mongoose from "mongoose";
-// import redis from "@/lib/redis";
-// import dbConnect from "@/lib/dbConnect";
-// import Work from "@/model/Work";
-
-// async function processUpdates() {
-//   await dbConnect();
-
-//   console.log("🚀 Update Worker started and waiting for jobs...");
-
-//   while (true) {
-//     try {
-//       // Wait until there’s an update job in Redis
-//       const job = await redis.brpop("work:update:queue", 0);
-//       if (!job) continue;
-
-//       const { workId, userId, role, updates } = JSON.parse(job[1]);
-
-//       if (role === "superadmin") {
-//         await Work.findByIdAndUpdate(
-//           new mongoose.Types.ObjectId(workId),
-//           { $set: updates },
-//           { new: true }
-//         );
-//       } else if (role === "admin") {
-//         await Work.findOneAndUpdate(
-//           { _id: new mongoose.Types.ObjectId(workId), adminId: userId },
-//           { $set: updates },
-//           { new: true }
-//         );
-//       }
-
-//       console.log(`✅ Updated work ${workId} in MongoDB`);
-//     } catch (err) {
-//       console.error("❌ DB update failed:", err);
-
-//       // retry logic → push job back into queue
-//       if (err instanceof Error) {
-//         console.error("Reason:", err.message);
-//       }
-//       // Push job back into queue safely
-//       // (only if job was pulled)
-//       // Avoid infinite crash loop if parsing fails
-//       try {
-//         const job = await redis.brpop("work:update:queue", 0);
-//         if (job) {
-//           await redis.lpush("work:update:queue", job[1]);
-//         }
-//       } catch (retryErr) {
-//         console.error("⚠️ Failed to requeue job:", retryErr);
-//       }
-//     }
-//   }
-// }
-
-// processUpdates();
-
+// workers/updateWorker.ts
 
 import "dotenv/config";
 import mongoose from "mongoose";
@@ -66,20 +6,31 @@ import redis from "@/lib/redis";
 import dbConnect from "@/lib/dbConnect";
 import Work from "@/model/Work";
 
+const SOURCE_QUEUE = "work:update:queue";
+const PROCESSING_QUEUE = "work:update:processing";
+const DEAD_LETTER_QUEUE = "work:update:dead";
+
 async function processUpdates() {
   try {
     await dbConnect();
     console.log("🚀 Update Worker started and waiting for jobs...");
 
+    // Handle Mongo reconnects
+    mongoose.connection.on("disconnected", async () => {
+      console.log("⚠️ MongoDB disconnected, reconnecting...");
+      await dbConnect();
+    });
+
     while (true) {
-      let job;
+      let job: string | null = null;
+
       try {
-        // Wait until there's an update job in Redis
-        job = await redis.brpop("work:update:queue", 0);
+        // Move job safely to processing queue
+        job = await redis.brpoplpush(SOURCE_QUEUE, PROCESSING_QUEUE, 0);
         if (!job) continue;
 
-        const { workId, userId, role, updates } = JSON.parse(job[1]);
-        console.log(`🔄 Processing update for work: ${workId}`);
+        const { workId, userId, role, updates } = JSON.parse(job);
+        console.log("📦 Job received:", { workId, userId, role, updates });
 
         let result;
         if (role === "superadmin") {
@@ -90,10 +41,7 @@ async function processUpdates() {
           );
         } else if (role === "admin") {
           result = await Work.findOneAndUpdate(
-            { 
-              _id: new mongoose.Types.ObjectId(workId), 
-              adminId: userId 
-            },
+            { _id: new mongoose.Types.ObjectId(workId), adminId: userId },
             { $set: updates },
             { new: true, runValidators: true }
           );
@@ -101,22 +49,26 @@ async function processUpdates() {
 
         if (result) {
           console.log(`✅ Updated work ${workId} in MongoDB`);
+          // Remove from processing queue
+          await redis.lrem(PROCESSING_QUEUE, 1, job);
         } else {
-          console.log(`❌ Work ${workId} not found or not authorized`);
-          // Push job back to queue for retry
-          await redis.lpush("work:update:queue", job[1]);
+          console.log(`❌ Work ${workId} not found or unauthorized`);
+          // Move job to dead-letter queue
+          await redis.lrem(PROCESSING_QUEUE, 1, job);
+          await redis.lpush(DEAD_LETTER_QUEUE, job);
         }
       } catch (err) {
         console.error("❌ DB update failed:", err);
-        
-        // Push the CURRENT job back to queue for retry
+
         if (job) {
-          await redis.lpush("work:update:queue", job[1]);
-          console.log("↩️ Job pushed back to queue for retry");
+          // Move back to source queue for retry
+          await redis.lrem(PROCESSING_QUEUE, 1, job);
+          await redis.lpush(SOURCE_QUEUE, job);
+          console.log("↩️ Job returned to queue for retry");
         }
-        
-        // Add a small delay before retrying to prevent tight loop
-        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Small delay before retrying
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
   } catch (error) {
@@ -125,7 +77,7 @@ async function processUpdates() {
   }
 }
 
-// Handle graceful shutdown
+// Graceful shutdown
 process.on("SIGINT", async () => {
   console.log("🛑 Shutting down update worker...");
   await mongoose.connection.close();

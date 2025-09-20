@@ -12,7 +12,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination"
 import { CreateWorkModal } from '@/components/CreateWorkModal'
-import { Copy, Loader } from 'lucide-react'
+import { Copy, Loader, RefreshCw, CheckCircle } from 'lucide-react'
 import UpdateDialog from '@/components/UpdateDialog'
 import { Button } from '@/components/ui/button'
 import { signOut } from 'next-auth/react'
@@ -24,6 +24,8 @@ interface Work {
   imageUrl: string;
   categoryId: string;
   createdAt: string;
+  isOptimistic?: boolean; // Flag for optimistic updates
+  originalData?: Partial<Work>; // Store original data for rollback
 }
 
 // Loading skeleton component
@@ -52,6 +54,7 @@ const AdminWorks = () => {
   const [loading, setLoading] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [recentlyUpdated, setRecentlyUpdated] = useState<Set<string>>(new Set())
 
   const totalPages = Math.ceil(count / limit) || 1
 
@@ -59,21 +62,17 @@ const AdminWorks = () => {
     signOut({ callbackUrl: "/sign-in" });
   };
 
-  // 🔹 Enhanced Copy to clipboard functionality with fallback
+  // Enhanced Copy to clipboard functionality with fallback
   const copyToClipboard = async (text: string, workId: string) => {
     try {
-      // Method 1: Try modern Clipboard API first
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(text)
         setCopiedId(workId)
         toast.success("Prompt copied to clipboard!")
-        
-        // Reset copied state after 2 seconds
         setTimeout(() => setCopiedId(null), 2000)
         return
       }
       
-      // Method 2: Fallback to legacy execCommand method
       const textArea = document.createElement("textarea")
       textArea.value = text
       textArea.style.position = "fixed"
@@ -100,21 +99,25 @@ const AdminWorks = () => {
     }
   }
 
-  // 🔹 Fetch works - memoized with useCallback for better performance
-  const fetchWorks = useCallback(async (pageNum: number) => {
+  // Fetch works - no automatic toast to prevent conflicts with optimistic updates
+  const fetchWorks = useCallback(async (pageNum: number, showToast: boolean = false) => {
     setLoading(true)
     try {
       const res = await axios.get(`/api/get-admin-works?page=${pageNum}`)
       const { works, count, message } = res.data
 
-      setWorks(works)
-      setCount(count)
+      setWorks(works || [])
+      setCount(count || 0)
       setPage(pageNum)
 
       // Fetch categories for these works
-      fetchCategories(works.map((w: Work) => w.categoryId))
+      if (works && works.length > 0) {
+        fetchCategories(works.map((w: Work) => w.categoryId))
+      }
 
-      toast.success(message)
+      if (showToast && message) {
+        toast.success(message)
+      }
     } catch (err) {
       console.error("Error fetching works:", err)
       toast.error("Failed to fetch works")
@@ -123,7 +126,7 @@ const AdminWorks = () => {
     }
   }, [])
 
-  // 🔹 Fetch category names by ID
+  // Fetch category names by ID
   const fetchCategories = async (ids: string[]) => {
     const uniqueIds = [...new Set(ids.filter(Boolean))]
     const categoryMap: Record<string, string> = { ...categories }
@@ -146,36 +149,115 @@ const AdminWorks = () => {
     setCategories(categoryMap)
   }
 
-  // 🔹 Handle work creation success - callback for CreateWorkModal
+  // Handle work creation success with optimistic update
   const handleWorkCreated = useCallback(() => {
-    // Refresh the current page to reflect the new work
-    fetchWorks(page)
     toast.success("New work added to your collection!")
+    fetchWorks(page, false)
   }, [fetchWorks, page])
 
-  // 🔹 Handle work update success - this will be called from UpdateDialog
-  const handleWorkUpdated = useCallback(() => {
-    // Refresh the current page to reflect changes
-    fetchWorks(page)
+  // Optimistic update handler for work updates
+  const handleWorkUpdated = useCallback((workId: string, updatedData: Partial<Work>) => {
+    // Store original data and apply optimistic update immediately
+    setWorks(prevWorks => 
+      prevWorks.map(work => 
+        work._id === workId 
+          ? { 
+              ...work,
+              ...updatedData,
+              isOptimistic: true,
+              originalData: {
+                prompt: work.prompt,
+                categoryId: work.categoryId,
+                imageUrl: work.imageUrl
+              }
+            }
+          : work
+      )
+    )
+
+    // Add visual indicator
+    setRecentlyUpdated(prev => new Set(prev).add(workId))
+    
+    // Remove visual indicator after 3 seconds
+    setTimeout(() => {
+      setRecentlyUpdated(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(workId)
+        return newSet
+      })
+    }, 3000)
+
+    // Show optimistic success message
     toast.success("Work updated successfully!")
-  }, [fetchWorks, page])
+  }, [])
 
+  // Handle optimistic update success confirmation
+  const handleOptimisticSuccess = useCallback((workId: string) => {
+    setWorks(prevWorks => 
+      prevWorks.map(work => 
+        work._id === workId 
+          ? { 
+              ...work,
+              isOptimistic: false,
+              originalData: undefined
+            }
+          : work
+      )
+    )
+  }, [])
+
+  // Handle optimistic update failure (rollback)
+  const handleOptimisticError = useCallback((workId: string, errorMessage: string) => {
+    setWorks(prevWorks => 
+      prevWorks.map(work => 
+        work._id === workId && work.originalData
+          ? { 
+              ...work,
+              ...work.originalData,
+              isOptimistic: false,
+              originalData: undefined
+            }
+          : work
+      )
+    )
+
+    // Remove from recently updated
+    setRecentlyUpdated(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(workId)
+      return newSet
+    })
+
+    toast.error(`Update failed: ${errorMessage}`)
+  }, [])
+
+  // Enhanced delete work with optimistic update
   const handleDeleteWork = async (workid: string) => {
-    setIsDeleting(true)
+    // Store original works array for potential rollback
+    const originalWorks = works
+    const originalCount = count
+    
+    // Optimistic update: remove immediately
+    setWorks(prevWorks => prevWorks.filter(w => w._id !== workid))
+    setCount(prev => prev - 1)
+    
     try {
-      // Call backend API
+      setIsDeleting(true)
       const res = await axios.delete(`/api/delete-work/${workid}`)
 
       if (res.status === 202) {
-        toast.success(res.data.message || "Work deletion queued")
-
-        // Optionally: Optimistic UI update (remove from state immediately)
-        setWorks((prev) => prev.filter((w) => w._id !== workid))
-        setCount((prev) => prev - 1)
+        toast.success(res.data.message || "Work deleted successfully")
+        // Optimistic update confirmed - no need to revert
       } else {
+        // Revert optimistic update on failure
+        setWorks(originalWorks)
+        setCount(originalCount)
         toast.error(res.data.message || "Failed to delete work")
       }
     } catch (err) {
+      // Revert optimistic update on error
+      setWorks(originalWorks)
+      setCount(originalCount)
       console.error("Delete work error:", err)
       toast.error("Something went wrong while deleting")
     } finally {
@@ -191,8 +273,17 @@ const AdminWorks = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-900">
       {/* Enhanced Fixed Create Button */}
       <div className="fixed top-6 right-6 z-50 flex justify-end gap-4 items-center">
-        {/* Updated: Pass the callback to CreateWorkModal */}
+        <button
+          onClick={() => fetchWorks(page, true)}
+          disabled={loading}
+          className="bg-white/90 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-2 shadow-sm hover:shadow-lg transition-all duration-300 flex items-center gap-2 text-gray-700"
+        >
+          <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+          <span className="hidden sm:inline">Refresh</span>
+        </button>
+        
         <CreateWorkModal onWorkCreated={handleWorkCreated} />
+        
         <Button onClick={handleLogout} className='px-4 py-2 rounded-md text-white cursor-pointer dark:text-white text-center relative overflow-hidden'>
           Logout
         </Button>
@@ -214,7 +305,10 @@ const AdminWorks = () => {
           <div className="flex justify-center gap-6 mb-8">
             <div className="group bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-white/20 dark:border-slate-700/50 rounded-2xl px-8 py-4 shadow-sm hover:shadow-lg transition-all duration-300 hover:scale-105">
               <div className="text-center">
-                <div className="text-3xl font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 transition-colors duration-300">{count}</div>
+                <div className="text-3xl font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 transition-colors duration-300">
+                  {count}
+                  {loading && <Loader className="inline ml-2 w-5 h-5 animate-spin" />}
+                </div>
                 <div className="text-sm text-slate-600 dark:text-slate-400 font-medium">Total Works</div>
               </div>
             </div>
@@ -228,7 +322,7 @@ const AdminWorks = () => {
         </div>
       </div>
 
-      {/* Works Grid */}
+      {/* Works Grid with optimistic update indicators */}
       <div className="px-6 md:px-20 pb-20">
         <div className="max-w-7xl mx-auto">
           {loading ? (
@@ -242,11 +336,34 @@ const AdminWorks = () => {
               {works.map((work, index) => (
                 <div
                   key={work._id}
-                  className="group bg-white rounded-3xl p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:border-gray-200 transition-all duration-500 hover:-translate-y-2"
+                  className={cn(
+                    "group bg-white rounded-3xl p-6 shadow-sm border transition-all duration-500 hover:-translate-y-2 relative",
+                    work.isOptimistic && "border-blue-400 shadow-blue-200/50",
+                    recentlyUpdated.has(work._id) && "border-green-400 shadow-green-200/50 shadow-lg",
+                    "border-gray-100 hover:shadow-xl hover:border-gray-200"
+                  )}
                   style={{
                     animationDelay: `${index * 100}ms`,
                   }}
                 >
+                  {/* Optimistic Update Indicator */}
+                  {work.isOptimistic && (
+                    <div className="absolute -top-2 -right-2 z-10">
+                      <div className="bg-blue-500 text-white p-1 rounded-full shadow-lg">
+                        <Loader className="w-4 h-4 animate-spin" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Success Update Indicator */}
+                  {recentlyUpdated.has(work._id) && !work.isOptimistic && (
+                    <div className="absolute -top-2 -right-2 z-10">
+                      <div className="bg-green-500 text-white p-1 rounded-full shadow-lg animate-bounce">
+                        <CheckCircle className="w-4 h-4" />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Image Container */}
                   <div className="relative overflow-hidden rounded-2xl mb-6 bg-gradient-to-br from-gray-50 to-gray-100">
                     <Image
@@ -277,9 +394,7 @@ const AdminWorks = () => {
                         title="Copy prompt to clipboard"
                       >
                         {copiedId === work._id ? (
-                          <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
+                          <CheckCircle className="w-4 h-4 text-green-600" />
                         ) : (
                           <Copy className="w-4 h-4" />
                         )}
@@ -297,19 +412,37 @@ const AdminWorks = () => {
                       {work.prompt}
                     </h3>
                     
-                    {/* Date */}
-                    <p className="text-sm text-gray-500 font-medium">
-                      Created {new Date(work.createdAt).toLocaleDateString('en-US', {
-                        month: 'long',
-                        day: 'numeric',
-                        year: 'numeric'
-                      })}
-                    </p>
+                    {/* Date with update indicators */}
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-gray-500 font-medium">
+                        Created {new Date(work.createdAt).toLocaleDateString('en-US', {
+                          month: 'long',
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </p>
+                      
+                      {work.isOptimistic && (
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
+                          Updating...
+                        </span>
+                      )}
+                      
+                      {recentlyUpdated.has(work._id) && !work.isOptimistic && (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
+                          Updated!
+                        </span>
+                      )}
+                    </div>
 
                     {/* Action Buttons */}
                     <div className="flex gap-3 pt-2">
-                      {/* Update Dialog - now with callback */}
-                      <UpdateDialog id={work._id.toString()} onUpdateSuccess={handleWorkUpdated} />
+                      <UpdateDialog 
+                        id={work._id.toString()} 
+                        onUpdateSuccess={handleWorkUpdated}
+                        onOptimisticSuccess={handleOptimisticSuccess}
+                        onOptimisticError={handleOptimisticError}
+                      />
                       
                       <button
                         onClick={() => handleDeleteWork(work._id)}
@@ -342,7 +475,6 @@ const AdminWorks = () => {
               <h3 className="text-2xl font-bold text-gray-800 mb-3">No works found</h3>
               <p className="text-gray-600 mb-8 text-lg">Start creating your first masterpiece to see it here.</p>
               
-              {/* Empty state create button */}
               <div className="inline-flex">
                 <CreateWorkModal onWorkCreated={handleWorkCreated} />
               </div>
@@ -351,13 +483,12 @@ const AdminWorks = () => {
         </div>
       </div>
 
-      {/* Fixed Pagination with Visible Previous/Next Buttons */}
+      {/* Fixed Pagination */}
       {totalPages > 1 && (
         <div className="flex justify-center pb-16">
           <div className="bg-white/80 backdrop-blur-sm border border-white/20 rounded-2xl p-3 shadow-sm">
             <Pagination>
               <PaginationContent className="gap-2">
-                {/* Enhanced Previous Button with visible text and icon */}
                 <PaginationItem>
                   <PaginationPrevious
                     href="#"
@@ -380,7 +511,6 @@ const AdminWorks = () => {
                   </PaginationPrevious>
                 </PaginationItem>
 
-                {/* Page Numbers */}
                 {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
                   let pageNum;
                   if (totalPages <= 7) {
@@ -414,7 +544,6 @@ const AdminWorks = () => {
                   )
                 })}
 
-                {/* Enhanced Next Button with visible text and icon */}
                 <PaginationItem>
                   <PaginationNext
                     href="#"
