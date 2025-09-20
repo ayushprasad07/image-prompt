@@ -1,4 +1,3 @@
-// src/app/api/delete-work/[workid]/route.ts
 import dbConnect from "@/lib/dbConnect";
 import { getServerSession, User } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/options";
@@ -8,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function DELETE(
   req: NextRequest,
-  context: { params: { workid: string } }
+  { params }: { params: { workid: string } }  // destructure params
 ) {
   await dbConnect();
 
@@ -23,15 +22,15 @@ export async function DELETE(
   }
 
   try {
-    const workId = new mongoose.Types.ObjectId(context.params.workid);
+    const workId = new mongoose.Types.ObjectId(params.workid); // use destructured params
 
-    // 🔹 Step 1: Remove from Redis immediately
+    // Remove from Redis immediately
     await Promise.all([
       redis.del(`work:${workId}`),
       redis.del(`admin:works:${user._id}`),
     ]);
 
-    // 🔹 Step 2: Queue async delete
+    // Queue async delete
     await redis.lpush(
       "work:delete:queue",
       JSON.stringify({ workId, userId: user._id, role: user.role })
