@@ -5,9 +5,9 @@ import dbConnect from "@/lib/dbConnect";
 import Admin from "@/model/Admin";
 import redis from "@/lib/redis";
 
-// const SUPERADMIN_USERNAME = "superadmin";
+const SUPERADMIN_USERNAME = "superadmin";
 // // bcrypt hashed password
-// const SUPERADMIN_PASSWORD = "$2b$10$wWZlv6Q70mk118q17Ve.4OrQ8UC8O1RWm7CoJA/PvuFIh3TymRpEa";
+const SUPERADMIN_PASSWORD = "$2b$10$wWZlv6Q70mk118q17Ve.4OrQ8UC8O1RWm7CoJA/PvuFIh3TymRpEa";
 // // const SUPERADMIN_PASSWORD = "SuperSecure123"; 
 
 export const authOptions: NextAuthOptions = {
@@ -25,12 +25,12 @@ export const authOptions: NextAuthOptions = {
         try {
           // ✅ Superadmin check (no DB, instant)
           if (
-            credentials.identifier === process.env.SUPERADMIN_USERNAME &&
-            bcrypt.compareSync(credentials.password, process.env.SUPERADMIN_PASSWORD!)
+            credentials.identifier === SUPERADMIN_USERNAME &&
+            bcrypt.compareSync(credentials.password, SUPERADMIN_PASSWORD!)
           ) {
             return {
-              _id: process.env.SUPERADMIN_USERNAME,
-              username: process.env.SUPERADMIN_USERNAME,
+              _id: SUPERADMIN_USERNAME,
+              username: SUPERADMIN_USERNAME,
               role: "superadmin",
             };
           }
