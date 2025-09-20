@@ -7,7 +7,7 @@ import redis from "@/lib/redis";
 
 export async function GET(
   req: Request,
-  { params }: { params: { categoryid: string } }
+  { params }: { params: Promise<{ categoryid: string }> } // params as Promise
 ) {
   await dbConnect();
   const session = await getServerSession(authOptions);
@@ -21,7 +21,7 @@ export async function GET(
   }
 
   try {
-    const { categoryid } = params; // ✅ no need for await
+    const { categoryid } = await params; // ✅ await params like in Next.js 15
 
     if (!categoryid) {
       return Response.json(

@@ -20,7 +20,7 @@ interface CloudinaryUploadResponse {
 
 export async function PUT(
   req: Request,
-  { params }: { params: { workid: string } }
+  { params }: { params: Promise<{ workid: string }> } // params as Promise
 ) {
   await dbConnect();
 
@@ -35,7 +35,7 @@ export async function PUT(
   }
 
   try {
-    const { workid } = params; // ✅ no await needed
+    const { workid } = await params; // ✅ await params like in Next.js 15
 
     if (!mongoose.Types.ObjectId.isValid(workid)) {
       return Response.json(

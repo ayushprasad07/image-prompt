@@ -419,8 +419,10 @@ const AdminWorksPage = () => {
   }, [isPolling, startPolling, stopPolling]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-900">
-      <div className="py-10 px-6 md:px-20 w-full">
+    // Fixed: Full screen container with proper height and width [web:520][web:523]
+    <div className="w-full min-h-screen h-full bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-900">
+      {/* Fixed: Full width container with proper spacing */}
+      <div className="w-full h-full py-10 px-6 md:px-20">
         {/* Enhanced Header with real-time status */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
@@ -489,219 +491,224 @@ const AdminWorksPage = () => {
           </div>
         </div>
 
-        {loading && works.length === 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            {[...Array(8)].map((_, i) => (
-              <WorkSkeleton key={i} />
-            ))}
-          </div>
-        ) : works.length === 0 ? (
-          <div className="text-center py-24">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full mb-6">
-              <svg className="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <h3 className="text-2xl font-bold text-gray-800 mb-3">No works found</h3>
-            <p className="text-gray-600 mb-8 text-lg">
-              {isSuperAdmin 
-                ? "This admin hasn't created any works yet. As SuperAdmin, you have full access to view and modify all works." 
-                : "This admin hasn't created any works yet."
-              }
-            </p>
-          </div>
-        ) : (
-          <>
+        {/* Fixed: Content container with full width and proper height */}
+        <div className="w-full flex-1">
+          {loading && works.length === 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-              {works.map((work, index) => (
-                <div
-                  key={work._id}
-                  className={cn(
-                    "group bg-white rounded-3xl p-6 shadow-sm border transition-all duration-500 hover:-translate-y-2 relative",
-                    work.isOptimistic && "border-blue-400 shadow-blue-200/50",
-                    recentlyUpdated.has(work._id) && "border-green-400 shadow-green-200/50 shadow-lg",
-                    isSuperAdmin && "ring-1 ring-purple-100",
-                    "border-gray-100 hover:shadow-xl hover:border-gray-200"
-                  )}
-                  style={{ animationDelay: `${index * 100}ms` }}
-                >
-                  {/* SuperAdmin indicator */}
-                  {isSuperAdmin && (
-                    <div className="absolute top-2 left-2 z-10">
-                      <div className="bg-purple-500 text-white p-1 rounded-full shadow-sm">
-                        <Shield className="w-3 h-3" />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Optimistic Update Indicator */}
-                  {work.isOptimistic && (
-                    <div className="absolute -top-2 -right-2 z-10">
-                      <div className="bg-blue-500 text-white p-1 rounded-full shadow-lg">
-                        <Loader className="w-4 h-4 animate-spin" />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Success Update Indicator */}
-                  {recentlyUpdated.has(work._id) && !work.isOptimistic && (
-                    <div className="absolute -top-2 -right-2 z-10">
-                      <div className="bg-green-500 text-white p-1 rounded-full shadow-lg animate-bounce">
-                        <CheckCircle className="w-4 h-4" />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Image Container */}
-                  <div className="relative overflow-hidden rounded-2xl mb-6 bg-gradient-to-br from-gray-50 to-gray-100">
-                    <Image
-                      src={work.imageUrl}
-                      alt={work.prompt}
-                      width={400}
-                      height={300}
-                      className="w-full h-56 object-cover transition-transform duration-700 group-hover:scale-110"
-                    />
-
-                    {/* Category Badge - Fixed with safe category name extraction */}
-                    <div className="absolute top-4 left-4">
-                      <span className="inline-flex items-center px-3 py-1.5 bg-white/95 backdrop-blur-sm rounded-full text-xs font-semibold text-gray-700 shadow-sm border border-gray-100">
-                        {getCategoryName(work.categoryId)}
-                      </span>
-                    </div>
-
-                    {/* Enhanced Copy Button */}
-                    <div className="absolute top-4 right-4 z-10">
-                      <button
-                        onClick={() => copyToClipboard(work.prompt, work._id)}
-                        className={cn(
-                          "p-2 backdrop-blur-sm rounded-full shadow-sm border transition-all duration-200 hover:scale-105",
-                          copiedId === work._id
-                            ? "bg-green-100 border-green-200 text-green-600"
-                            : "bg-white/95 border-gray-100 hover:bg-white text-gray-600"
-                        )}
-                        title="Copy prompt to clipboard"
-                      >
-                        {copiedId === work._id ? (
-                          <CheckCircle className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Gradient Overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                  </div>
-
-                  {/* Content Section */}
-                  <div className="space-y-4">
-                    {/* Full Prompt */}
-                    <h3 className="text-lg font-bold text-gray-900 leading-7 group-hover:text-blue-600 transition-colors duration-300">
-                      {work.prompt}
-                    </h3>
-                    
-                    {/* Date with update indicators */}
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-gray-500 font-medium">
-                        Created {new Date(work.createdAt).toLocaleDateString("en-US", {
-                          month: "long",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </p>
-                      
-                      {work.isOptimistic && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
-                          {isSuperAdmin ? "SuperAdmin Updating..." : "Updating..."}
-                        </span>
-                      )}
-                      
-                      {recentlyUpdated.has(work._id) && !work.isOptimistic && (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
-                          {isSuperAdmin ? "SuperAdmin Updated!" : "Updated!"}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex gap-3 pt-2">
-                      {/* Update Dialog with optimistic callbacks */}
-                      <UpdateDialog 
-                        id={work._id.toString()} 
-                        onUpdateSuccess={handleWorkUpdated}
-                        onOptimisticSuccess={handleOptimisticSuccess}
-                        onOptimisticError={handleOptimisticError}
-                      />
-
-                      {/* Enhanced Delete Button */}
-                      <button
-                        onClick={() => handleDeleteWork(work._id)}
-                        className="p-2.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 rounded-xl transition-all duration-200 hover:scale-105 flex items-center justify-center border border-red-100 hover:border-red-200"
-                        title={isSuperAdmin ? "Delete work (SuperAdmin)" : "Delete work"}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Subtle decoration with SuperAdmin accent */}
-                  <div className={cn(
-                    "absolute top-0 right-0 w-24 h-24 bg-gradient-to-br to-transparent rounded-br-3xl pointer-events-none",
-                    isSuperAdmin ? "from-purple-500/5" : "from-blue-500/5"
-                  )}></div>
-                </div>
+              {[...Array(8)].map((_, i) => (
+                <WorkSkeleton key={i} />
               ))}
             </div>
+          ) : works.length === 0 ? (
+            // Fixed: Full width and centered empty state with proper height [web:523][web:524]
+            <div className="w-full min-h-[60vh] flex flex-col items-center justify-center text-center px-4">
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full mb-6">
+                <svg className="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-800 mb-3">No works found</h3>
+              <p className="text-gray-600 mb-8 text-lg max-w-md">
+                {isSuperAdmin 
+                  ? "This admin hasn't created any works yet. As SuperAdmin, you have full access to view and modify all works." 
+                  : "This admin hasn't created any works yet."
+                }
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Fixed: Full width grid container */}
+              <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                {works.map((work, index) => (
+                  <div
+                    key={work._id}
+                    className={cn(
+                      "group bg-white rounded-3xl p-6 shadow-sm border transition-all duration-500 hover:-translate-y-2 relative",
+                      work.isOptimistic && "border-blue-400 shadow-blue-200/50",
+                      recentlyUpdated.has(work._id) && "border-green-400 shadow-green-200/50 shadow-lg",
+                      isSuperAdmin && "ring-1 ring-purple-100",
+                      "border-gray-100 hover:shadow-xl hover:border-gray-200"
+                    )}
+                    style={{ animationDelay: `${index * 100}ms` }}
+                  >
+                    {/* SuperAdmin indicator */}
+                    {isSuperAdmin && (
+                      <div className="absolute top-2 left-2 z-10">
+                        <div className="bg-purple-500 text-white p-1 rounded-full shadow-sm">
+                          <Shield className="w-3 h-3" />
+                        </div>
+                      </div>
+                    )}
 
-            {/* Enhanced Pagination Controls */}
-            {pages > 1 && (
-              <div className="flex justify-center items-center gap-4 mt-12">
-                <div className="bg-white/80 backdrop-blur-sm border border-white/20 rounded-2xl p-3 shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handlePageChange(page - 1)}
-                      disabled={page <= 1 || loading}
-                      className={cn(
-                        "px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2",
-                        page <= 1 || loading
-                          ? "text-gray-400 cursor-not-allowed opacity-50"
-                          : "text-gray-700 hover:bg-blue-50 hover:text-blue-600 cursor-pointer"
-                      )}
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                      <span>Previous</span>
-                    </button>
+                    {/* Optimistic Update Indicator */}
+                    {work.isOptimistic && (
+                      <div className="absolute -top-2 -right-2 z-10">
+                        <div className="bg-blue-500 text-white p-1 rounded-full shadow-lg">
+                          <Loader className="w-4 h-4 animate-spin" />
+                        </div>
+                      </div>
+                    )}
 
-                    <div className="flex items-center gap-1 px-4 py-2">
-                      <span className="text-gray-600 font-medium">
-                        Page {page} of {pages}
-                      </span>
-                      {(loading || isPolling) && <Loader className="w-4 h-4 animate-spin ml-2" />}
+                    {/* Success Update Indicator */}
+                    {recentlyUpdated.has(work._id) && !work.isOptimistic && (
+                      <div className="absolute -top-2 -right-2 z-10">
+                        <div className="bg-green-500 text-white p-1 rounded-full shadow-lg animate-bounce">
+                          <CheckCircle className="w-4 h-4" />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Image Container */}
+                    <div className="relative overflow-hidden rounded-2xl mb-6 bg-gradient-to-br from-gray-50 to-gray-100">
+                      <Image
+                        src={work.imageUrl}
+                        alt={work.prompt}
+                        width={400}
+                        height={300}
+                        className="w-full h-56 object-cover transition-transform duration-700 group-hover:scale-110"
+                      />
+
+                      {/* Category Badge - Fixed with safe category name extraction */}
+                      <div className="absolute top-4 left-4">
+                        <span className="inline-flex items-center px-3 py-1.5 bg-white/95 backdrop-blur-sm rounded-full text-xs font-semibold text-gray-700 shadow-sm border border-gray-100">
+                          {getCategoryName(work.categoryId)}
+                        </span>
+                      </div>
+
+                      {/* Enhanced Copy Button */}
+                      <div className="absolute top-4 right-4 z-10">
+                        <button
+                          onClick={() => copyToClipboard(work.prompt, work._id)}
+                          className={cn(
+                            "p-2 backdrop-blur-sm rounded-full shadow-sm border transition-all duration-200 hover:scale-105",
+                            copiedId === work._id
+                              ? "bg-green-100 border-green-200 text-green-600"
+                              : "bg-white/95 border-gray-100 hover:bg-white text-gray-600"
+                          )}
+                          title="Copy prompt to clipboard"
+                        >
+                          {copiedId === work._id ? (
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Gradient Overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                     </div>
 
-                    <button
-                      onClick={() => handlePageChange(page + 1)}
-                      disabled={page >= pages || loading}
-                      className={cn(
-                        "px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2",
-                        page >= pages || loading
-                          ? "text-gray-400 cursor-not-allowed opacity-50"
-                          : "text-gray-700 hover:bg-blue-50 hover:text-blue-600 cursor-pointer"
-                      )}
-                    >
-                      <span>Next</span>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
+                    {/* Content Section */}
+                    <div className="space-y-4">
+                      {/* Full Prompt */}
+                      <h3 className="text-lg font-bold text-gray-900 leading-7 group-hover:text-blue-600 transition-colors duration-300">
+                        {work.prompt}
+                      </h3>
+                      
+                      {/* Date with update indicators */}
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-gray-500 font-medium">
+                          Created {new Date(work.createdAt).toLocaleDateString("en-US", {
+                            month: "long",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </p>
+                        
+                        {work.isOptimistic && (
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
+                            {isSuperAdmin ? "SuperAdmin Updating..." : "Updating..."}
+                          </span>
+                        )}
+                        
+                        {recentlyUpdated.has(work._id) && !work.isOptimistic && (
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
+                            {isSuperAdmin ? "SuperAdmin Updated!" : "Updated!"}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 pt-2">
+                        {/* Update Dialog with optimistic callbacks */}
+                        <UpdateDialog 
+                          id={work._id.toString()} 
+                          onUpdateSuccess={handleWorkUpdated}
+                          onOptimisticSuccess={handleOptimisticSuccess}
+                          onOptimisticError={handleOptimisticError}
+                        />
+
+                        {/* Enhanced Delete Button */}
+                        <button
+                          onClick={() => handleDeleteWork(work._id)}
+                          className="p-2.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 rounded-xl transition-all duration-200 hover:scale-105 flex items-center justify-center border border-red-100 hover:border-red-200"
+                          title={isSuperAdmin ? "Delete work (SuperAdmin)" : "Delete work"}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Subtle decoration with SuperAdmin accent */}
+                    <div className={cn(
+                      "absolute top-0 right-0 w-24 h-24 bg-gradient-to-br to-transparent rounded-br-3xl pointer-events-none",
+                      isSuperAdmin ? "from-purple-500/5" : "from-blue-500/5"
+                    )}></div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Enhanced Pagination Controls */}
+              {pages > 1 && (
+                <div className="w-full flex justify-center items-center gap-4 mt-12">
+                  <div className="bg-white/80 backdrop-blur-sm border border-white/20 rounded-2xl p-3 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handlePageChange(page - 1)}
+                        disabled={page <= 1 || loading}
+                        className={cn(
+                          "px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2",
+                          page <= 1 || loading
+                            ? "text-gray-400 cursor-not-allowed opacity-50"
+                            : "text-gray-700 hover:bg-blue-50 hover:text-blue-600 cursor-pointer"
+                        )}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                        <span>Previous</span>
+                      </button>
+
+                      <div className="flex items-center gap-1 px-4 py-2">
+                        <span className="text-gray-600 font-medium">
+                          Page {page} of {pages}
+                        </span>
+                        {(loading || isPolling) && <Loader className="w-4 h-4 animate-spin ml-2" />}
+                      </div>
+
+                      <button
+                        onClick={() => handlePageChange(page + 1)}
+                        disabled={page >= pages || loading}
+                        className={cn(
+                          "px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2",
+                          page >= pages || loading
+                            ? "text-gray-400 cursor-not-allowed opacity-50"
+                            : "text-gray-700 hover:bg-blue-50 hover:text-blue-600 cursor-pointer"
+                        )}
+                      >
+                        <span>Next</span>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </>
-        )}
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
