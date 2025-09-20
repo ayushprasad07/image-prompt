@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { workid: string } }  // destructure params
+  { params }: { params: Promise<{ workid: string }> } // params as Promise
 ) {
   await dbConnect();
 
@@ -22,7 +22,8 @@ export async function DELETE(
   }
 
   try {
-    const workId = new mongoose.Types.ObjectId(params.workid); // use destructured params
+    const { workid } = await params; // await params like in Next.js 15
+    const workId = new mongoose.Types.ObjectId(workid);
 
     // Remove from Redis immediately
     await Promise.all([
