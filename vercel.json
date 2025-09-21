@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/workers/delete",
+      "schedule": "*/1 * * * *"
+    },
+    {
+      "path": "/api/workers/update",
+      "schedule": "*/1 * * * *"
+    }
+  ]
+}
