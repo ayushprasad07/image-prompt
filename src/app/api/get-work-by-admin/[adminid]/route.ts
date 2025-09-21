@@ -43,8 +43,8 @@ export async function GET(
       Work.find({ adminId })
         .sort({ createdAt: -1 }) // latest first
         .skip(skip)
-        .limit(limit)
-        .populate("categoryId", "name"),
+        .limit(limit),
+        // .populate("categoryId", "name"),
       Work.countDocuments({ adminId }),
     ]);
 
