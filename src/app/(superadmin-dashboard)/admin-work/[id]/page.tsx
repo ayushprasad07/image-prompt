@@ -70,6 +70,24 @@ const AdminWorksPage = () => {
   const [pages, setPages] = useState(1);
   const [totalWorks, setTotalWorks] = useState(0);
 
+  // Refs to avoid stale closures and circular dependencies
+  const categoriesRef = useRef(categories);
+  const worksRef = useRef(works);
+  const pageRef = useRef(page);
+
+  // Update refs when state changes
+  useEffect(() => {
+    categoriesRef.current = categories;
+  }, [categories]);
+
+  useEffect(() => {
+    worksRef.current = works;
+  }, [works]);
+
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+
   // Role-based helpers
   const isSuperAdmin = user?.role === 'superadmin';
   const isAdmin = user?.role === 'admin';
@@ -80,7 +98,7 @@ const AdminWorksPage = () => {
       return categoryId.name;
     }
     if (typeof categoryId === 'string') {
-      return categories[categoryId] || "Loading...";
+      return categoriesRef.current[categoryId] || "Loading...";
     }
     return "Uncategorized";
   };
@@ -96,12 +114,14 @@ const AdminWorksPage = () => {
     return '';
   };
 
-  // Fetch categories for works that only have category IDs
-  const fetchMissingCategories = useCallback(async (works: Work[]) => {
-    const missingCategoryIds = works
+  // Fixed: Stable fetchMissingCategories without circular dependencies
+  const fetchMissingCategories = useCallback(async (worksData: Work[]) => {
+    const currentCategories = categoriesRef.current;
+    
+    const missingCategoryIds = worksData
       .filter(work => typeof work.categoryId === 'string')
       .map(work => work.categoryId as string)
-      .filter(id => id && !categories[id]);
+      .filter(id => id && !currentCategories[id]);
 
     const uniqueIds = [...new Set(missingCategoryIds)];
 
@@ -135,9 +155,9 @@ const AdminWorksPage = () => {
     } catch (error) {
       console.error("Error fetching categories:", error);
     }
-  }, [categories]); // Fixed: Only depend on categories, not works
+  }, []); // Empty dependency array - function is stable
 
-  // Enhanced fetchWorks with silent updates for real-time polling
+  // Fixed: Stable fetchWorks function
   const fetchWorks = useCallback(async (pageNum: number, showToast: boolean = false, silentUpdate: boolean = false) => {
     if (!id) return;
     
@@ -154,8 +174,9 @@ const AdminWorksPage = () => {
         
         // For silent updates, compare with current state to avoid unnecessary updates
         if (silentUpdate) {
-          // Simple comparison - you might want to implement a more sophisticated comparison
-          const hasChanges = JSON.stringify(worksData) !== JSON.stringify(works.filter(w => !w.isOptimistic));
+          const currentWorks = worksRef.current.filter(w => !w.isOptimistic);
+          const hasChanges = JSON.stringify(worksData) !== JSON.stringify(currentWorks);
+          
           if (!hasChanges) {
             return; // No changes, skip update
           }
@@ -166,8 +187,8 @@ const AdminWorksPage = () => {
         setPage(pagination?.page || pageNum);
         setTotalWorks(pagination?.total || 0);
         
-        // Fetch missing categories
-        await fetchMissingCategories(worksData);
+        // Fetch missing categories separately to avoid circular dependency
+        fetchMissingCategories(worksData);
         
         if (showToast) {
           toast.success("Works refreshed successfully");
@@ -183,9 +204,9 @@ const AdminWorksPage = () => {
         setLoading(false);
       }
     }
-  }, [id, fetchMissingCategories]); // Fixed: Removed works dependency to prevent infinite loop
+  }, [id, fetchMissingCategories]); // Only essential dependencies
 
-  // Fixed: Separate polling functions with proper dependencies [web:502]
+  // Fixed: Simplified polling functions
   const startPolling = useCallback(() => {
     if (!isSuperAdmin || pollingIntervalRef.current) return;
 
@@ -193,10 +214,11 @@ const AdminWorksPage = () => {
     setIsPolling(true);
     
     pollingIntervalRef.current = setInterval(() => {
-      // Use current page value directly to avoid stale closure
-      fetchWorks(page, false, true); // Silent update
+      // Use ref to get current page to avoid stale closure
+      const currentPage = pageRef.current;
+      fetchWorks(currentPage, false, true); // Silent update
     }, 3000); // Poll every 3 seconds
-  }, [isSuperAdmin, fetchWorks, page]);
+  }, [isSuperAdmin, fetchWorks]);
 
   const stopPolling = useCallback(() => {
     if (pollingIntervalRef.current) {
@@ -205,9 +227,9 @@ const AdminWorksPage = () => {
     }
     setIsPolling(false);
     console.log("⏹️ Real-time polling stopped");
-  }, []); // Fixed: Empty dependency array since it doesn't depend on anything
+  }, []);
 
-  // Setup polling for superadmin - Fixed with proper dependency management [web:499]
+  // Fixed: Separate polling setup effect
   useEffect(() => {
     if (isSuperAdmin && !isPolling) {
       startPolling();
@@ -222,14 +244,21 @@ const AdminWorksPage = () => {
         pollingIntervalRef.current = null;
       }
     };
-  }, [isSuperAdmin]); // Fixed: Only depend on isSuperAdmin, not the functions
+  }, [isSuperAdmin, isPolling, startPolling, stopPolling]);
 
-  // Initial fetch - separate effect to avoid conflicts
+  // Fixed: Initial fetch effect - only runs once when id changes
   useEffect(() => {
     if (id) {
+      fetchWorks(1); // Always start with page 1 on initial load
+    }
+  }, [id]); // Only depend on id
+
+  // Fixed: Separate effect for page changes
+  useEffect(() => {
+    if (id && page > 1) { // Only fetch if not initial page (page 1 is handled by initial fetch)
       fetchWorks(page);
     }
-  }, [id, page]); // Fixed: Removed fetchWorks from dependencies to prevent loop
+  }, [page, fetchWorks]); // This is safe because fetchWorks is now stable
 
   // Enhanced copy to clipboard with fallback
   const copyToClipboard = async (text: string, workId: string) => {
@@ -305,7 +334,8 @@ const AdminWorksPage = () => {
     let categoryInfo = updatedData.categoryId;
     if (typeof updatedData.categoryId === 'string') {
       // If we get a category ID, try to get the name
-      if (!categories[updatedData.categoryId]) {
+      const currentCategories = categoriesRef.current;
+      if (!currentCategories[updatedData.categoryId]) {
         try {
           const res = await axios.get(`/api/fetch-category-by-id/${updatedData.categoryId}`);
           if (res.data.success) {
@@ -324,7 +354,7 @@ const AdminWorksPage = () => {
       } else {
         categoryInfo = {
           _id: updatedData.categoryId,
-          name: categories[updatedData.categoryId]
+          name: currentCategories[updatedData.categoryId]
         } as Category;
       }
     }
@@ -419,9 +449,7 @@ const AdminWorksPage = () => {
   }, [isPolling, startPolling, stopPolling]);
 
   return (
-    // Fixed: Full screen container with proper height and width [web:520][web:523]
     <div className="w-full min-h-screen h-full bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-900">
-      {/* Fixed: Full width container with proper spacing */}
       <div className="w-full h-full py-10 px-6 md:px-20">
         {/* Enhanced Header with real-time status */}
         <div className="flex items-center justify-between mb-8">
@@ -491,7 +519,7 @@ const AdminWorksPage = () => {
           </div>
         </div>
 
-        {/* Fixed: Content container with full width and proper height */}
+        {/* Content container */}
         <div className="w-full flex-1">
           {loading && works.length === 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
@@ -500,7 +528,6 @@ const AdminWorksPage = () => {
               ))}
             </div>
           ) : works.length === 0 ? (
-            // Fixed: Full width and centered empty state with proper height [web:523][web:524]
             <div className="w-full min-h-[60vh] flex flex-col items-center justify-center text-center px-4">
               <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full mb-6">
                 <svg className="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -517,7 +544,7 @@ const AdminWorksPage = () => {
             </div>
           ) : (
             <>
-              {/* Fixed: Full width grid container */}
+              {/* Works grid */}
               <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
                 {works.map((work, index) => (
                   <div
@@ -568,7 +595,7 @@ const AdminWorksPage = () => {
                         className="w-full h-56 object-cover transition-transform duration-700 group-hover:scale-110"
                       />
 
-                      {/* Category Badge - Fixed with safe category name extraction */}
+                      {/* Category Badge */}
                       <div className="absolute top-4 left-4">
                         <span className="inline-flex items-center px-3 py-1.5 bg-white/95 backdrop-blur-sm rounded-full text-xs font-semibold text-gray-700 shadow-sm border border-gray-100">
                           {getCategoryName(work.categoryId)}
