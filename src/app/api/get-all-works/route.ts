@@ -63,7 +63,8 @@ export async function GET(req: Request) {
       .skip(skip)
       .limit(limit)
       .lean()
-      .select("_id prompt image categoryId createdAt");
+      .select("_id prompt imageUrl categoryId createdAt")
+      .populate("categoryId","name");
 
     const responseData = JSON.stringify({
       success: true,
