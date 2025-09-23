@@ -1,6 +1,7 @@
 import dbConnect from "@/lib/dbConnect";
 import Work from "@/model/Work";
 import redis from "@/lib/redis";
+import "@/model/Category";
 
 //  /api/get-all-works?page=2
 
@@ -63,7 +64,7 @@ export async function GET(req: Request) {
       .skip(skip)
       .limit(limit)
       .lean()
-      // .select("_id prompt imageUrl categoryId createdAt")
+      .select("_id prompt imageUrl categoryId createdAt")
       .populate("categoryId","name");
 
     const responseData = JSON.stringify({
