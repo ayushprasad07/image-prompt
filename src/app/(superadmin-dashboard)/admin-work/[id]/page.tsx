@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import axios from "axios";
 import Image from "next/image";
 import { toast } from "sonner";
-import { Copy, Loader, RefreshCw, CheckCircle, ArrowLeft, Trash2, Shield } from "lucide-react";
+import { Copy, Loader, RefreshCw, CheckCircle, ArrowLeft, Trash2, Shield, Menu, X } from "lucide-react";
 import UpdateDialog from "@/components/UpdateDialog";
 import { cn } from "@/lib/utils";
 
@@ -19,13 +19,12 @@ interface Work {
   _id: string;
   prompt: string;
   imageUrl: string;
-  categoryId: Category | string; // Can be either populated object or string ID
+  categoryId: Category | string;
   createdAt: string;
   isOptimistic?: boolean;
   originalData?: Partial<Work>;
 }
 
-// User session type
 interface SessionUser {
   _id: string;
   email: string;
@@ -33,17 +32,17 @@ interface SessionUser {
   name?: string;
 }
 
-// Loading skeleton component
+// Enhanced loading skeleton component with better responsive sizing
 const WorkSkeleton = () => (
-  <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 animate-pulse">
-    <div className="bg-gray-200 rounded-2xl w-full h-56 mb-6"></div>
-    <div className="space-y-4">
-      <div className="bg-gray-200 h-5 rounded-lg w-3/4"></div>
-      <div className="bg-gray-200 h-4 rounded-lg w-1/2"></div>
-      <div className="bg-gray-200 h-3 rounded-lg w-1/3"></div>
-      <div className="flex gap-3 mt-6">
-        <div className="bg-gray-200 h-10 rounded-xl flex-1"></div>
-        <div className="bg-gray-200 h-10 w-10 rounded-xl"></div>
+  <div className="bg-white rounded-xl sm:rounded-2xl lg:rounded-3xl p-3 sm:p-4 lg:p-6 shadow-sm border border-gray-100 animate-pulse">
+    <div className="bg-gray-200 rounded-lg sm:rounded-xl lg:rounded-2xl w-full h-40 sm:h-48 lg:h-56 mb-3 sm:mb-4 lg:mb-6"></div>
+    <div className="space-y-2 sm:space-y-3 lg:space-y-4">
+      <div className="bg-gray-200 h-4 sm:h-5 rounded-md lg:rounded-lg w-3/4"></div>
+      <div className="bg-gray-200 h-3 sm:h-4 rounded-md lg:rounded-lg w-1/2"></div>
+      <div className="bg-gray-200 h-3 rounded-md lg:rounded-lg w-1/3"></div>
+      <div className="flex gap-2 sm:gap-3 mt-4 sm:mt-6">
+        <div className="bg-gray-200 h-8 sm:h-10 rounded-lg lg:rounded-xl flex-1"></div>
+        <div className="bg-gray-200 h-8 sm:h-10 w-8 sm:w-10 rounded-lg lg:rounded-xl"></div>
       </div>
     </div>
   </div>
@@ -60,6 +59,7 @@ const AdminWorksPage = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [recentlyUpdated, setRecentlyUpdated] = useState<Set<string>>(new Set());
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   
   // Real-time update state
   const [isPolling, setIsPolling] = useState(false);
@@ -114,7 +114,7 @@ const AdminWorksPage = () => {
     return '';
   };
 
-  // Fixed: Stable fetchMissingCategories without circular dependencies
+  // [Previous helper functions remain the same - fetchMissingCategories, fetchWorks, etc.]
   const fetchMissingCategories = useCallback(async (worksData: Work[]) => {
     const currentCategories = categoriesRef.current;
     
@@ -148,16 +148,14 @@ const AdminWorksPage = () => {
         return acc;
       }, {} as Record<string, string>);
 
-      // Only update if we have new categories
       if (Object.keys(newCategories).length > 0) {
         setCategories(prev => ({ ...prev, ...newCategories }));
       }
     } catch (error) {
       console.error("Error fetching categories:", error);
     }
-  }, []); // Empty dependency array - function is stable
+  }, []);
 
-  // Fixed: Stable fetchWorks function
   const fetchWorks = useCallback(async (pageNum: number, showToast: boolean = false, silentUpdate: boolean = false) => {
     if (!id) return;
     
@@ -172,13 +170,12 @@ const AdminWorksPage = () => {
       if (success) {
         const worksData = data || [];
         
-        // For silent updates, compare with current state to avoid unnecessary updates
         if (silentUpdate) {
           const currentWorks = worksRef.current.filter(w => !w.isOptimistic);
           const hasChanges = JSON.stringify(worksData) !== JSON.stringify(currentWorks);
           
           if (!hasChanges) {
-            return; // No changes, skip update
+            return;
           }
         }
 
@@ -187,7 +184,6 @@ const AdminWorksPage = () => {
         setPage(pagination?.page || pageNum);
         setTotalWorks(pagination?.total || 0);
         
-        // Fetch missing categories separately to avoid circular dependency
         fetchMissingCategories(worksData);
         
         if (showToast) {
@@ -204,9 +200,8 @@ const AdminWorksPage = () => {
         setLoading(false);
       }
     }
-  }, [id, fetchMissingCategories]); // Only essential dependencies
+  }, [id, fetchMissingCategories]);
 
-  // Fixed: Simplified polling functions
   const startPolling = useCallback(() => {
     if (!isSuperAdmin || pollingIntervalRef.current) return;
 
@@ -214,10 +209,9 @@ const AdminWorksPage = () => {
     setIsPolling(true);
     
     pollingIntervalRef.current = setInterval(() => {
-      // Use ref to get current page to avoid stale closure
       const currentPage = pageRef.current;
-      fetchWorks(currentPage, false, true); // Silent update
-    }, 3000); // Poll every 3 seconds
+      fetchWorks(currentPage, false, true);
+    }, 3000);
   }, [isSuperAdmin, fetchWorks]);
 
   const stopPolling = useCallback(() => {
@@ -229,7 +223,6 @@ const AdminWorksPage = () => {
     console.log("⏹️ Real-time polling stopped");
   }, []);
 
-  // Fixed: Separate polling setup effect
   useEffect(() => {
     if (isSuperAdmin && !isPolling) {
       startPolling();
@@ -237,7 +230,6 @@ const AdminWorksPage = () => {
       stopPolling();
     }
 
-    // Cleanup function
     return () => {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
@@ -246,19 +238,17 @@ const AdminWorksPage = () => {
     };
   }, [isSuperAdmin, isPolling, startPolling, stopPolling]);
 
-  // Fixed: Initial fetch effect - only runs once when id changes
   useEffect(() => {
     if (id) {
-      fetchWorks(1); // Always start with page 1 on initial load
+      fetchWorks(1);
     }
-  }, [id]); // Only depend on id
+  }, [id]);
 
-  // Fixed: Separate effect for page changes
   useEffect(() => {
-    if (id && page > 1) { // Only fetch if not initial page (page 1 is handled by initial fetch)
+    if (id && page > 1) {
       fetchWorks(page);
     }
-  }, [page, fetchWorks]); // This is safe because fetchWorks is now stable
+  }, [page, fetchWorks]);
 
   // Enhanced copy to clipboard with fallback
   const copyToClipboard = async (text: string, workId: string) => {
@@ -271,7 +261,6 @@ const AdminWorksPage = () => {
         return;
       }
       
-      // Fallback for older browsers
       const textArea = document.createElement("textarea");
       textArea.value = text;
       textArea.style.position = "fixed";
@@ -297,13 +286,10 @@ const AdminWorksPage = () => {
     }
   };
 
-  // Optimistic delete work
   const handleDeleteWork = async (workId: string) => {
-    // Store original data for rollback
     const originalWorks = works;
     const originalTotal = totalWorks;
     
-    // Optimistic update: remove immediately
     setWorks(prevWorks => prevWorks.filter(w => w._id !== workId));
     setTotalWorks(prev => prev - 1);
     
@@ -312,15 +298,12 @@ const AdminWorksPage = () => {
       
       if (res.status === 202 || res.status === 200) {
         toast.success(res.data.message || "Work deleted successfully");
-        // For superadmin, the polling will handle the real-time update
       } else {
-        // Revert optimistic update on failure
         setWorks(originalWorks);
         setTotalWorks(originalTotal);
         toast.error(res.data.message || "Failed to delete work");
       }
     } catch (error: any) {
-      // Revert optimistic update on error
       setWorks(originalWorks);
       setTotalWorks(originalTotal);
       console.error("Delete work error:", error);
@@ -328,12 +311,9 @@ const AdminWorksPage = () => {
     }
   };
 
-  // Handle optimistic work update with proper category handling
   const handleWorkUpdated = async (workId: string, updatedData: Partial<Work>) => {
-    // Handle category update properly
     let categoryInfo = updatedData.categoryId;
     if (typeof updatedData.categoryId === 'string') {
-      // If we get a category ID, try to get the name
       const currentCategories = categoriesRef.current;
       if (!currentCategories[updatedData.categoryId]) {
         try {
@@ -359,7 +339,6 @@ const AdminWorksPage = () => {
       }
     }
 
-    // Store original data and apply optimistic update immediately
     setWorks(prevWorks =>
       prevWorks.map(work =>
         work._id === workId
@@ -378,10 +357,8 @@ const AdminWorksPage = () => {
       )
     );
 
-    // Add visual indicator
     setRecentlyUpdated(prev => new Set(prev).add(workId));
     
-    // Remove visual indicator after 3 seconds
     setTimeout(() => {
       setRecentlyUpdated(prev => {
         const newSet = new Set(prev);
@@ -390,11 +367,9 @@ const AdminWorksPage = () => {
       });
     }, 3000);
 
-    // Show optimistic success message
     toast.success(isSuperAdmin ? "Work updated with SuperAdmin privileges!" : "Work updated successfully!");
   };
 
-  // Handle optimistic update success confirmation
   const handleOptimisticSuccess = (workId: string) => {
     setWorks(prevWorks =>
       prevWorks.map(work =>
@@ -409,7 +384,6 @@ const AdminWorksPage = () => {
     );
   };
 
-  // Handle optimistic update failure (rollback)
   const handleOptimisticError = (workId: string, errorMessage: string) => {
     setWorks(prevWorks =>
       prevWorks.map(work =>
@@ -424,7 +398,6 @@ const AdminWorksPage = () => {
       )
     );
 
-    // Remove from recently updated
     setRecentlyUpdated(prev => {
       const newSet = new Set(prev);
       newSet.delete(workId);
@@ -439,7 +412,6 @@ const AdminWorksPage = () => {
     setPage(newPage);
   };
 
-  // Toggle polling function
   const togglePolling = useCallback(() => {
     if (isPolling) {
       stopPolling();
@@ -450,92 +422,145 @@ const AdminWorksPage = () => {
 
   return (
     <div className="w-full min-h-screen h-full bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-900">
-      <div className="w-full h-full py-10 px-6 md:px-20">
-        {/* Enhanced Header with real-time status */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.back()}
-              className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm border border-white/20 rounded-xl text-gray-700 hover:bg-white hover:shadow-lg transition-all duration-300"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back</span>
-            </button>
+      <div className="w-full h-full py-4 sm:py-6 lg:py-10 px-3 sm:px-6 lg:px-8 xl:px-20">
+        {/* Enhanced Mobile-First Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-0 mb-6 sm:mb-8">
+          {/* Back Button and Title Section */}
+          <div className="flex flex-col space-y-3 sm:space-y-0">
+            {/* Back Button and Mobile Menu */}
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => router.back()}
+                className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white/80 backdrop-blur-sm border border-white/20 rounded-lg sm:rounded-xl text-gray-700 hover:bg-white hover:shadow-lg transition-all duration-300 text-sm sm:text-base"
+              >
+                <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden xs:inline">Back</span>
+              </button>
+              
+              {/* Mobile Actions Menu Toggle */}
+              <button
+                onClick={() => setShowMobileMenu(!showMobileMenu)}
+                className="sm:hidden flex items-center gap-2 px-3 py-2 bg-white/80 backdrop-blur-sm border border-white/20 rounded-lg text-gray-700 hover:bg-white transition-all duration-300"
+              >
+                {showMobileMenu ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+              </button>
+            </div>
             
+            {/* Title and Status */}
             <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-slate-800 via-blue-600 to-indigo-600 dark:from-slate-200 dark:via-blue-400 dark:to-indigo-400 bg-clip-text text-transparent">
+              <div className="flex flex-col xs:flex-row xs:items-center gap-2 xs:gap-3">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-slate-800 via-blue-600 to-indigo-600 dark:from-slate-200 dark:via-blue-400 dark:to-indigo-400 bg-clip-text text-transparent leading-tight">
                   Admin Works
                 </h1>
                 {isSuperAdmin && (
-                  <div className="flex items-center gap-2">
-                    <Shield className="w-5 h-5 text-purple-600" />
-                    <span className="text-sm bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-medium">
-                      SuperAdmin
-                    </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2 bg-purple-50 px-2 py-1 rounded-full">
+                      <Shield className="w-3 h-3 sm:w-4 sm:h-4 text-purple-600" />
+                      <span className="text-xs sm:text-sm text-purple-700 font-medium">
+                        SuperAdmin
+                      </span>
+                    </div>
                     {isPolling && (
-                      <div className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                      <div className="flex items-center gap-1 text-xs bg-green-50 text-green-600 px-2 py-1 rounded-full">
                         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                        <span>Live Updates</span>
+                        <span className="hidden xs:inline">Live Updates</span>
+                        <span className="xs:hidden">Live</span>
                       </div>
                     )}
                   </div>
                 )}
               </div>
-              <p className="text-gray-600 dark:text-gray-400 mt-2">
-                {totalWorks} work{totalWorks !== 1 ? 's' : ''} found
+              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1 sm:mt-2">
+                <span className="font-semibold">{totalWorks}</span> work{totalWorks !== 1 ? 's' : ''} found
                 {isSuperAdmin && isPolling && (
-                  <span className="text-green-600 ml-2">• Live monitoring active</span>
+                  <span className="text-green-600 ml-2 hidden sm:inline">• Live monitoring active</span>
                 )}
               </p>
             </div>
           </div>
 
-          {/* Enhanced Refresh Button with polling control */}
-          <div className="flex items-center gap-2">
+          {/* Desktop Action Buttons */}
+          <div className="hidden sm:flex items-center gap-2 lg:gap-3">
             {isSuperAdmin && (
               <button
                 onClick={togglePolling}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 backdrop-blur-sm border rounded-xl transition-all duration-300",
+                  "flex items-center gap-2 px-3 lg:px-4 py-2 backdrop-blur-sm border rounded-xl transition-all duration-300 text-sm lg:text-base",
                   isPolling 
                     ? "bg-green-50 border-green-200 text-green-700 hover:bg-green-100" 
                     : "bg-white/80 border-white/20 text-gray-700 hover:bg-white hover:shadow-lg"
                 )}
               >
                 <div className={cn("w-2 h-2 rounded-full", isPolling ? "bg-green-500 animate-pulse" : "bg-gray-400")} />
-                <span className="hidden sm:inline">{isPolling ? 'Stop Live Updates' : 'Start Live Updates'}</span>
+                <span className="hidden md:inline">{isPolling ? 'Stop Live Updates' : 'Start Live Updates'}</span>
+                <span className="md:hidden">{isPolling ? 'Stop' : 'Start'}</span>
               </button>
             )}
             
             <button
               onClick={() => fetchWorks(page, true)}
               disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm border border-white/20 rounded-xl text-gray-700 hover:bg-white hover:shadow-lg transition-all duration-300"
+              className="flex items-center gap-2 px-3 lg:px-4 py-2 bg-white/80 backdrop-blur-sm border border-white/20 rounded-xl text-gray-700 hover:bg-white hover:shadow-lg transition-all duration-300 text-sm lg:text-base"
             >
               <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-              <span className="hidden sm:inline">Manual Refresh</span>
+              <span className="hidden md:inline">Manual Refresh</span>
+              <span className="md:hidden">Refresh</span>
             </button>
           </div>
+
+          {/* Mobile Actions Menu */}
+          {showMobileMenu && (
+            <div className="sm:hidden bg-white/95 backdrop-blur-sm border border-white/20 rounded-xl p-3 shadow-lg space-y-2">
+              {isSuperAdmin && (
+                <button
+                  onClick={() => {
+                    togglePolling();
+                    setShowMobileMenu(false);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 border rounded-lg transition-all duration-300 text-sm",
+                    isPolling 
+                      ? "bg-green-50 border-green-200 text-green-700" 
+                      : "bg-gray-50 border-gray-200 text-gray-700"
+                  )}
+                >
+                  <div className={cn("w-2 h-2 rounded-full", isPolling ? "bg-green-500 animate-pulse" : "bg-gray-400")} />
+                  <span>{isPolling ? 'Stop Live Updates' : 'Start Live Updates'}</span>
+                </button>
+              )}
+              
+              <button
+                onClick={() => {
+                  fetchWorks(page, true);
+                  setShowMobileMenu(false);
+                }}
+                disabled={loading}
+                className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 transition-all duration-300 text-sm"
+              >
+                <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+                <span>Manual Refresh</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Content container */}
+        {/* Content container with enhanced responsive grid */}
         <div className="w-full flex-1">
           {loading && works.length === 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+            <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6 xl:gap-8">
               {[...Array(8)].map((_, i) => (
                 <WorkSkeleton key={i} />
               ))}
             </div>
           ) : works.length === 0 ? (
-            <div className="w-full min-h-[60vh] flex flex-col items-center justify-center text-center px-4">
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full mb-6">
-                <svg className="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-full min-h-[50vh] sm:min-h-[60vh] flex flex-col items-center justify-center text-center px-4">
+              <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full mb-4 sm:mb-6">
+                <svg className="w-8 h-8 sm:w-10 sm:h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
               </div>
-              <h3 className="text-2xl font-bold text-gray-800 mb-3">No works found</h3>
-              <p className="text-gray-600 mb-8 text-lg max-w-md">
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2 sm:mb-3">No works found</h3>
+              <p className="text-sm sm:text-base lg:text-lg text-gray-600 mb-6 sm:mb-8 max-w-sm sm:max-w-md leading-relaxed">
                 {isSuperAdmin 
                   ? "This admin hasn't created any works yet. As SuperAdmin, you have full access to view and modify all works." 
                   : "This admin hasn't created any works yet."
@@ -544,70 +569,70 @@ const AdminWorksPage = () => {
             </div>
           ) : (
             <>
-              {/* Works grid */}
-              <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+              {/* Enhanced Responsive Works Grid */}
+              <div className="w-full grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6 xl:gap-8">
                 {works.map((work, index) => (
                   <div
                     key={work._id}
                     className={cn(
-                      "group bg-white rounded-3xl p-6 shadow-sm border transition-all duration-500 hover:-translate-y-2 relative",
+                      "group bg-white rounded-xl sm:rounded-2xl lg:rounded-3xl p-3 sm:p-4 lg:p-6 shadow-sm border transition-all duration-500 hover:-translate-y-1 sm:hover:-translate-y-2 relative",
                       work.isOptimistic && "border-blue-400 shadow-blue-200/50",
                       recentlyUpdated.has(work._id) && "border-green-400 shadow-green-200/50 shadow-lg",
                       isSuperAdmin && "ring-1 ring-purple-100",
                       "border-gray-100 hover:shadow-xl hover:border-gray-200"
                     )}
-                    style={{ animationDelay: `${index * 100}ms` }}
+                    style={{ animationDelay: `${index * 50}ms` }}
                   >
                     {/* SuperAdmin indicator */}
                     {isSuperAdmin && (
-                      <div className="absolute top-2 left-2 z-10">
+                      <div className="absolute top-1 left-1 sm:top-2 sm:left-2 z-10">
                         <div className="bg-purple-500 text-white p-1 rounded-full shadow-sm">
-                          <Shield className="w-3 h-3" />
+                          <Shield className="w-2 h-2 sm:w-3 sm:h-3" />
                         </div>
                       </div>
                     )}
 
-                    {/* Optimistic Update Indicator */}
+                    {/* Status Indicators */}
                     {work.isOptimistic && (
-                      <div className="absolute -top-2 -right-2 z-10">
+                      <div className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2 z-10">
                         <div className="bg-blue-500 text-white p-1 rounded-full shadow-lg">
-                          <Loader className="w-4 h-4 animate-spin" />
+                          <Loader className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                         </div>
                       </div>
                     )}
 
-                    {/* Success Update Indicator */}
                     {recentlyUpdated.has(work._id) && !work.isOptimistic && (
-                      <div className="absolute -top-2 -right-2 z-10">
+                      <div className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2 z-10">
                         <div className="bg-green-500 text-white p-1 rounded-full shadow-lg animate-bounce">
-                          <CheckCircle className="w-4 h-4" />
+                          <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4" />
                         </div>
                       </div>
                     )}
 
-                    {/* Image Container */}
-                    <div className="relative overflow-hidden rounded-2xl mb-6 bg-gradient-to-br from-gray-50 to-gray-100">
+                    {/* Enhanced Image Container */}
+                    <div className="relative overflow-hidden rounded-lg sm:rounded-xl lg:rounded-2xl mb-3 sm:mb-4 lg:mb-6 bg-gradient-to-br from-gray-50 to-gray-100">
                       <Image
                         src={work.imageUrl}
                         alt={work.prompt}
                         width={400}
                         height={300}
-                        className="w-full h-56 object-cover transition-transform duration-700 group-hover:scale-110"
+                        className="w-full h-32 xs:h-36 sm:h-40 lg:h-56 object-cover transition-transform duration-700 group-hover:scale-110"
+                        sizes="(max-width: 475px) 100vw, (max-width: 640px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
                       />
 
                       {/* Category Badge */}
-                      <div className="absolute top-4 left-4">
-                        <span className="inline-flex items-center px-3 py-1.5 bg-white/95 backdrop-blur-sm rounded-full text-xs font-semibold text-gray-700 shadow-sm border border-gray-100">
+                      <div className="absolute top-2 sm:top-3 lg:top-4 left-2 sm:left-3 lg:left-4">
+                        <span className="inline-flex items-center px-2 sm:px-3 py-1 sm:py-1.5 bg-white/95 backdrop-blur-sm rounded-full text-xs font-semibold text-gray-700 shadow-sm border border-gray-100 max-w-[120px] sm:max-w-none truncate">
                           {getCategoryName(work.categoryId)}
                         </span>
                       </div>
 
                       {/* Enhanced Copy Button */}
-                      <div className="absolute top-4 right-4 z-10">
+                      <div className="absolute top-2 sm:top-3 lg:top-4 right-2 sm:right-3 lg:right-4 z-10">
                         <button
                           onClick={() => copyToClipboard(work.prompt, work._id)}
                           className={cn(
-                            "p-2 backdrop-blur-sm rounded-full shadow-sm border transition-all duration-200 hover:scale-105",
+                            "p-1.5 sm:p-2 backdrop-blur-sm rounded-full shadow-sm border transition-all duration-200 hover:scale-105",
                             copiedId === work._id
                               ? "bg-green-100 border-green-200 text-green-600"
                               : "bg-white/95 border-gray-100 hover:bg-white text-gray-600"
@@ -615,9 +640,9 @@ const AdminWorksPage = () => {
                           title="Copy prompt to clipboard"
                         >
                           {copiedId === work._id ? (
-                            <CheckCircle className="w-4 h-4 text-green-600" />
+                            <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
                           ) : (
-                            <Copy className="w-4 h-4" />
+                            <Copy className="w-3 h-3 sm:w-4 sm:h-4" />
                           )}
                         </button>
                       </div>
@@ -626,20 +651,21 @@ const AdminWorksPage = () => {
                       <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                     </div>
 
-                    {/* Content Section */}
-                    <div className="space-y-4">
-                      {/* Full Prompt */}
-                      <h3 className="text-lg font-bold text-gray-900 leading-7 group-hover:text-blue-600 transition-colors duration-300">
+                    {/* Enhanced Content Section */}
+                    <div className="space-y-2 sm:space-y-3 lg:space-y-4">
+                      {/* Responsive Prompt Text */}
+                      <h3 className="text-sm sm:text-base lg:text-lg font-bold text-gray-900 leading-tight sm:leading-normal group-hover:text-blue-600 transition-colors duration-300 line-clamp-2 sm:line-clamp-3">
                         {work.prompt}
                       </h3>
                       
                       {/* Date with update indicators */}
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm text-gray-500 font-medium">
-                          Created {new Date(work.createdAt).toLocaleDateString("en-US", {
-                            month: "long",
+                      <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between gap-1 xs:gap-2">
+                        <p className="text-xs sm:text-sm text-gray-500 font-medium">
+                          <span className="hidden sm:inline">Created </span>
+                          {new Date(work.createdAt).toLocaleDateString("en-US", {
+                            month: "short",
                             day: "numeric",
-                            year: "numeric",
+                            year: "2-digit",
                           })}
                         </p>
                         
@@ -656,9 +682,8 @@ const AdminWorksPage = () => {
                         )}
                       </div>
 
-                      {/* Action Buttons */}
-                      <div className="flex gap-3 pt-2">
-                        {/* Update Dialog with optimistic callbacks */}
+                      {/* Enhanced Action Buttons */}
+                      <div className="flex gap-2 sm:gap-3 pt-1 sm:pt-2">
                         <UpdateDialog 
                           id={work._id.toString()} 
                           onUpdateSuccess={handleWorkUpdated}
@@ -666,36 +691,43 @@ const AdminWorksPage = () => {
                           onOptimisticError={handleOptimisticError}
                         />
 
-                        {/* Enhanced Delete Button */}
                         <button
                           onClick={() => handleDeleteWork(work._id)}
-                          className="p-2.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 rounded-xl transition-all duration-200 hover:scale-105 flex items-center justify-center border border-red-100 hover:border-red-200"
+                          className="p-2 sm:p-2.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 rounded-lg sm:rounded-xl transition-all duration-200 hover:scale-105 flex items-center justify-center border border-red-100 hover:border-red-200"
                           title={isSuperAdmin ? "Delete work (SuperAdmin)" : "Delete work"}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
                         </button>
                       </div>
                     </div>
 
-                    {/* Subtle decoration with SuperAdmin accent */}
+                    {/* Subtle decoration */}
                     <div className={cn(
-                      "absolute top-0 right-0 w-24 h-24 bg-gradient-to-br to-transparent rounded-br-3xl pointer-events-none",
+                      "absolute top-0 right-0 w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 bg-gradient-to-br to-transparent rounded-br-xl sm:rounded-br-2xl lg:rounded-br-3xl pointer-events-none",
                       isSuperAdmin ? "from-purple-500/5" : "from-blue-500/5"
                     )}></div>
                   </div>
                 ))}
               </div>
 
-              {/* Enhanced Pagination Controls */}
+              {/* Enhanced Mobile-First Pagination */}
               {pages > 1 && (
-                <div className="w-full flex justify-center items-center gap-4 mt-12">
-                  <div className="bg-white/80 backdrop-blur-sm border border-white/20 rounded-2xl p-3 shadow-sm">
-                    <div className="flex items-center gap-2">
+                <div className="w-full flex flex-col sm:flex-row justify-center items-center gap-3 sm:gap-4 mt-8 sm:mt-12">
+                  {/* Mobile Pagination Info */}
+                  <div className="sm:hidden text-center">
+                    <p className="text-sm text-gray-600">
+                      Page <span className="font-semibold">{page}</span> of <span className="font-semibold">{pages}</span>
+                    </p>
+                  </div>
+
+                  {/* Pagination Controls */}
+                  <div className="bg-white/80 backdrop-blur-sm border border-white/20 rounded-xl sm:rounded-2xl p-2 sm:p-3 shadow-sm w-full sm:w-auto">
+                    <div className="flex items-center justify-between sm:justify-center gap-2 sm:gap-2">
                       <button
                         onClick={() => handlePageChange(page - 1)}
                         disabled={page <= 1 || loading}
                         className={cn(
-                          "px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2",
+                          "flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl text-sm font-medium transition-all duration-200",
                           page <= 1 || loading
                             ? "text-gray-400 cursor-not-allowed opacity-50"
                             : "text-gray-700 hover:bg-blue-50 hover:text-blue-600 cursor-pointer"
@@ -704,11 +736,13 @@ const AdminWorksPage = () => {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
-                        <span>Previous</span>
+                        <span className="hidden xs:inline">Previous</span>
+                        <span className="xs:hidden">Prev</span>
                       </button>
 
-                      <div className="flex items-center gap-1 px-4 py-2">
-                        <span className="text-gray-600 font-medium">
+                      {/* Desktop Pagination Info */}
+                      <div className="hidden sm:flex items-center gap-1 px-2 sm:px-4 py-2">
+                        <span className="text-gray-600 font-medium text-sm sm:text-base">
                           Page {page} of {pages}
                         </span>
                         {(loading || isPolling) && <Loader className="w-4 h-4 animate-spin ml-2" />}
@@ -718,13 +752,14 @@ const AdminWorksPage = () => {
                         onClick={() => handlePageChange(page + 1)}
                         disabled={page >= pages || loading}
                         className={cn(
-                          "px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2",
+                          "flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl text-sm font-medium transition-all duration-200",
                           page >= pages || loading
                             ? "text-gray-400 cursor-not-allowed opacity-50"
                             : "text-gray-700 hover:bg-blue-50 hover:text-blue-600 cursor-pointer"
                         )}
                       >
-                        <span>Next</span>
+                        <span className="hidden xs:inline">Next</span>
+                        <span className="xs:inline">Next</span>
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
