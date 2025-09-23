@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from 'sonner';
 import axios from 'axios';
-import { Loader, Users, FileImage, RefreshCw } from 'lucide-react';
+import { Loader, Users, FileImage, RefreshCw, Trash2, Tag, Plus, AlertTriangle, Search } from 'lucide-react';
 
 interface AdminStats {
   total: number;
@@ -15,6 +15,13 @@ interface AdminStats {
 interface WorkStats {
   count: number;
   totalWorks: number;
+}
+
+interface Category {
+  _id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 const Superadmin = () => {
@@ -29,6 +36,68 @@ const Superadmin = () => {
   const [workStats, setWorkStats] = useState<WorkStats>({ count: 0, totalWorks: 0 });
   const [statsLoading, setStatsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  // New states for categories management
+  const [categories, setCategoriesList] = useState<Category[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [deletingCategory, setDeletingCategory] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  
+  // Search functionality state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredCategories, setFilteredCategories] = useState<Category[]>([]);
+
+  // Fetch all categories
+  const fetchCategories = async () => {
+    setCategoriesLoading(true);
+    try {
+      const response = await axios.get('/api/get-all-categories');
+      if (response.data.success) {
+        setCategoriesList(response.data.data);
+        setFilteredCategories(response.data.data); // Initialize filtered categories
+      }
+    } catch (error: any) {
+      console.error("Error fetching categories:", error);
+      toast.error("Failed to fetch categories");
+    } finally {
+      setCategoriesLoading(false);
+    }
+  };
+
+  // Filter categories based on search query
+  useEffect(() => {
+    if (searchQuery.trim() === "") {
+      setFilteredCategories(categories);
+    } else {
+      const filtered = categories.filter(category =>
+        category.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setFilteredCategories(filtered);
+    }
+  }, [searchQuery, categories]);
+
+  // Delete category function
+  const deleteCategory = async (categoryId: string) => {
+    setDeletingCategory(categoryId);
+    try {
+      const response = await axios.delete(`/api/delete-category-by-id/${categoryId}`);
+      if (response.data.success) {
+        toast.success("Category deleted successfully");
+        // Remove from local state
+        setCategoriesList(prev => prev.filter(cat => cat._id !== categoryId));
+      }
+    } catch (error: any) {
+      console.error("Error deleting category:", error);
+      if (axios.isAxiosError(error) && error.response) {
+        toast.error(error.response.data.message || "Failed to delete category"); 
+      } else {
+        toast.error("Failed to delete category");
+      }
+    } finally {
+      setDeletingCategory(null);
+      setShowDeleteConfirm(null);
+    }
+  };
 
   // Fetch dashboard statistics
   const fetchDashboardStats = async () => {
@@ -73,14 +142,10 @@ const Superadmin = () => {
     }
   };
 
-  // Fetch stats on component mount and set up auto-refresh
+  // Fetch initial data on component mount (no auto-refresh)
   useEffect(() => {
     fetchDashboardStats();
-    
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchDashboardStats, 30000);
-    
-    return () => clearInterval(interval);
+    fetchCategories();
   }, []);
 
   const handleCategoryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -100,6 +165,8 @@ const Superadmin = () => {
       const response = await axios.post("/api/create-category", {name});
       toast.success(response.data.message);
       setCategories({name: ""}); // Reset form
+      // Refresh categories list
+      fetchCategories();
     } catch (error: any) {
       console.log("Error while creating category:", error);
       if (axios.isAxiosError(error) && error.response) {
@@ -141,6 +208,16 @@ const Superadmin = () => {
     }
   }
 
+  // Handle search input change
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+  };
+
+  // Clear search
+  const clearSearch = () => {
+    setSearchQuery("");
+  };
+
   const formatNumber = (num: number) => {
     if (num >= 1000000) {
       return (num / 1000000).toFixed(1) + 'M';
@@ -149,6 +226,64 @@ const Superadmin = () => {
     }
     return num.toString();
   };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  // Confirmation Dialog Component
+  const DeleteConfirmDialog = ({ categoryId, categoryName, onConfirm, onCancel }: {
+    categoryId: string;
+    categoryName: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+  }) => (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white/95 backdrop-blur-lg border border-red-200 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="bg-red-100 p-2 rounded-lg">
+            <AlertTriangle className="w-6 h-6 text-red-600" />
+          </div>
+          <h3 className="text-xl font-bold text-gray-900">Confirm Deletion</h3>
+        </div>
+        
+        <p className="text-gray-700 mb-6">
+          Are you sure you want to delete the category <span className="font-semibold text-red-600">"{categoryName}"</span>? 
+          This action cannot be undone.
+        </p>
+        
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={deletingCategory === categoryId}
+            className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+          >
+            {deletingCategory === categoryId ? (
+              <>
+                <Loader className="w-4 h-4 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              <>
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className='py-10 pb-20 md:p-20 w-full'>
@@ -166,11 +301,14 @@ const Superadmin = () => {
         
         {/* Refresh Button */}
         <button
-          onClick={fetchDashboardStats}
-          disabled={statsLoading}
+          onClick={() => {
+            fetchDashboardStats();
+            fetchCategories();
+          }}
+          disabled={statsLoading || categoriesLoading}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 disabled:opacity-50"
         >
-          <RefreshCw className={cn("w-4 h-4", statsLoading && "animate-spin")} />
+          <RefreshCw className={cn("w-4 h-4", (statsLoading || categoriesLoading) && "animate-spin")} />
           Refresh Stats
         </button>
       </div>
@@ -280,8 +418,8 @@ const Superadmin = () => {
         </div>
       </div>
 
-      {/* Create credentials and category forms section */}
-      <div className='grid grid-cols-1 md:grid-cols-2 gap-6 p-4'>
+      {/* Create credentials and category forms section - MOVED ABOVE CATEGORIES */}
+      <div className='grid grid-cols-1 md:grid-cols-2 gap-6 p-4 mb-8'>
         <div className="shadow-input mx-auto w-full max-w-md rounded-none bg-white p-4 md:rounded-2xl md:p-8 dark:bg-black">
           <h2 className="text-xl font-bold text-neutral-800 dark:text-neutral-200">
             Create Admin Credentials
@@ -332,7 +470,8 @@ const Superadmin = () => {
         </div>
 
         <div className="shadow-input mx-auto w-full max-w-md rounded-none bg-white p-4 md:rounded-2xl md:p-8 dark:bg-black">
-          <h2 className="text-xl font-bold text-neutral-800 dark:text-neutral-200">
+          <h2 className="text-xl font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-2">
+            <Plus className="w-5 h-5" />
             Create Category
           </h2>
           <p className="text-gray-600 dark:text-gray-400 text-sm mt-2">
@@ -368,6 +507,133 @@ const Superadmin = () => {
           </form>
         </div>
       </div>
+
+      {/* Categories Management Section */}
+      <div className="mb-8 p-4">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <Tag className="w-6 h-6 text-orange-600" />
+              Categories Management
+            </h2>
+            <p className="text-gray-600 text-sm mt-1">
+              Manage your content categories • {filteredCategories.length} of {categories.length} categories
+              {searchQuery && <span className="text-orange-600"> (filtered)</span>}
+            </p>
+          </div>
+        </div>
+
+        {/* Search Bar */}
+        <div className="mb-6">
+          <div className="relative max-w-md">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="w-5 h-5 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              placeholder="Search categories..."
+              value={searchQuery}
+              onChange={handleSearchChange}
+              className="block w-full pl-10 pr-12 py-3 border border-gray-200 rounded-xl bg-white/90 backdrop-blur-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 placeholder-gray-500 text-gray-900"
+            />
+            {searchQuery && (
+              <button
+                onClick={clearSearch}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Categories Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-10">
+          {categoriesLoading ? (
+            // Loading skeleton
+            Array.from({ length: 8 }).map((_, index) => (
+              <div key={index} className="bg-white/90 backdrop-blur-lg border border-gray-200 rounded-xl p-4 animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="h-4 bg-gray-300 rounded w-3/4 mb-2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                  </div>
+                  <div className="w-8 h-8 bg-gray-300 rounded-lg"></div>
+                </div>
+              </div>
+            ))
+          ) : filteredCategories.length === 0 ? (
+            <div className="col-span-full bg-white/90 backdrop-blur-lg border border-gray-200 rounded-xl p-8 text-center">
+              <Tag className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                {searchQuery ? "No categories found" : "No Categories Found"}
+              </h3>
+              <p className="text-gray-600">
+                {searchQuery 
+                  ? `No categories match "${searchQuery}". Try a different search term.`
+                  : "Create your first category using the form above."
+                }
+              </p>
+              {searchQuery && (
+                <button
+                  onClick={clearSearch}
+                  className="mt-3 px-4 py-2 text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors"
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
+          ) : (
+            filteredCategories.map((category) => (
+              <div 
+                key={category._id} 
+                className="bg-white/90 backdrop-blur-lg border border-gray-200 rounded-xl p-4 hover:bg-white transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-orange-500/20 shadow-lg group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-900 truncate text-lg">{category.name}</h3>
+                    <p className="text-xs text-gray-500">Created {formatDate(category.createdAt)}</p>
+                  </div>
+                  <div className="bg-orange-100 p-2 rounded-lg">
+                    <Tag className="w-4 h-4 text-orange-600" />
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-gray-400">
+                    ID: {category._id.slice(-8)}
+                  </div>
+                  <button
+                    onClick={() => setShowDeleteConfirm(category._id)}
+                    disabled={deletingCategory === category._id}
+                    className="flex items-center gap-1 px-3 py-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-all duration-200 opacity-0 group-hover:opacity-100 disabled:opacity-50 text-sm"
+                  >
+                    {deletingCategory === category._id ? (
+                      <Loader className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3 h-3" />
+                    )}
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        {/* <hr className='my-4'></hr> */}
+      </div>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <DeleteConfirmDialog
+          categoryId={showDeleteConfirm}
+          categoryName={categories.find(cat => cat._id === showDeleteConfirm)?.name || ''}
+          onConfirm={() => deleteCategory(showDeleteConfirm)}
+          onCancel={() => setShowDeleteConfirm(null)}
+        />
+      )}
     </div>
   )
 }

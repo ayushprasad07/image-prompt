@@ -2,6 +2,7 @@ import { getServerSession, User } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/options";
 import dbConnect from "@/lib/dbConnect";
 import Category from "@/model/Category";
+import redis from "@/lib/redis"; // ✅ import redis
 
 export async function POST(req: Request) {
   await dbConnect();
@@ -46,6 +47,9 @@ export async function POST(req: Request) {
     }
 
     const newCategory = await Category.create({ name });
+
+    // ✅ Clear the cached categories so GET fetches fresh data
+    await redis.del("categories:all");
 
     return Response.json(
       {

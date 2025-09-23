@@ -6,9 +6,8 @@ import Admin from "@/model/Admin";
 import redis from "@/lib/redis";
 
 const SUPERADMIN_USERNAME = "superadmin";
-// // bcrypt hashed password
+// bcrypt hashed password for default superadmin
 const SUPERADMIN_PASSWORD = "$2b$10$wWZlv6Q70mk118q17Ve.4OrQ8UC8O1RWm7CoJA/PvuFIh3TymRpEa";
-// // const SUPERADMIN_PASSWORD = "SuperSecure123"; 
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -21,9 +20,9 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials: any): Promise<any> {
         await dbConnect();
-        console.log(process.env.SUPERADMIN_PASSWORD);
+
         try {
-          // ✅ Superadmin check (no DB, instant)
+          // ✅ Default hardcoded superadmin
           if (
             credentials.identifier === SUPERADMIN_USERNAME &&
             bcrypt.compareSync(credentials.password, SUPERADMIN_PASSWORD!)
@@ -47,7 +46,7 @@ export const authOptions: NextAuthOptions = {
               return {
                 _id: user._id,
                 username: user.username,
-                role: "admin",
+                role: user.role, // ✅ use role from DB (admin or superadmin)
               };
             }
           }
@@ -62,7 +61,7 @@ export const authOptions: NextAuthOptions = {
           );
           if (!isPasswordValid) throw new Error("Invalid credentials");
 
-          // ✅ Cache user in Redis (TTL: 10 minutes)
+          // ✅ Cache user in Redis (TTL: 10 min)
           await redis.setex(
             `admin:${user.username}`,
             600,
@@ -70,13 +69,14 @@ export const authOptions: NextAuthOptions = {
               _id: user._id.toString(),
               username: user.username,
               password: user.password, // keep hashed password for compare
+              role: user.role, // ✅ cache role as well
             })
           );
 
           return {
             _id: user._id.toString(),
             username: user.username,
-            role: "admin",
+            role: user.role, // ✅ role determines if they are admin or superadmin
           };
         } catch (error) {
           throw new Error("Authentication failed");
@@ -90,7 +90,7 @@ export const authOptions: NextAuthOptions = {
       if (token) {
         session.user._id = token._id;
         session.user.username = token.username;
-        session.user.role = token.role;
+        session.user.role = token.role; // ✅ superadmin or admin
       }
       return session;
     },
@@ -98,7 +98,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token._id = user._id;
         token.username = user.username;
-        token.role = user.role;
+        token.role = user.role; // ✅ superadmin or admin
       }
       return token;
     },
