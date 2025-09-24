@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { toast } from 'sonner';
 import axios from 'axios';
 import { Loader, Users, FileImage, RefreshCw, Trash2, Tag, Plus, AlertTriangle, Search } from 'lucide-react';
+import SettingsDialog from '@/components/SettingDialog';
 
 interface AdminStats {
   total: number;
@@ -287,7 +288,7 @@ const Superadmin = () => {
 
   return (
     <div className='py-10 pb-20 md:p-20 w-full'>
-      <div className='w-full px-5 flex items-center justify-between'>
+      <div className='w-full px-5 flex flex-col md:flex-row md:justify-between md:items-center gap-4'>
         <div>
           <h1 className='bg-opacity-50 bg-gradient-to-r from-neutral-600 to-neutral-900 bg-clip-text text-3xl font-bold text-transparent md:text-5xl'>
             Super Admin
@@ -299,19 +300,23 @@ const Superadmin = () => {
           )}
         </div>
         
-        {/* Refresh Button */}
-        <button
-          onClick={() => {
-            fetchDashboardStats();
-            fetchCategories();
-          }}
-          disabled={statsLoading || categoriesLoading}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 disabled:opacity-50"
-        >
-          <RefreshCw className={cn("w-4 h-4", (statsLoading || categoriesLoading) && "animate-spin")} />
-          Refresh Stats
-        </button>
+        {/* Settings and Refresh Button */}
+        <div className='flex items-center gap-3'>
+          <SettingsDialog/>
+          <button
+            onClick={() => {
+              fetchDashboardStats();
+              fetchCategories();
+            }}
+            disabled={statsLoading || categoriesLoading}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 disabled:opacity-50"
+          >
+            <RefreshCw className={cn("w-4 h-4", (statsLoading || categoriesLoading) && "animate-spin")} />
+            Refresh Stats
+          </button>
+        </div>
       </div>
+
       
       <hr className='my-5'/>
       

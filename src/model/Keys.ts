@@ -1,0 +1,18 @@
+import mongoose, {Schema, Document} from "mongoose";
+
+export interface IKeys extends Document{
+    _id : String;
+    intestrialAd : string;
+    bannerAd : string;
+    rewardedAd : string;
+}
+
+const advertisementSchema = new Schema<IKeys>({
+    intestrialAd : {type : String, default:""},
+    bannerAd : {type : String, default:""},
+    rewardedAd : {type : String, default:""}
+});
+
+const Keys = mongoose.models.Keys || mongoose.model<IKeys>("Keys", advertisementSchema);
+
+export default Keys;
