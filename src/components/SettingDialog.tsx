@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Settings, Shield, Save, RotateCcw, Hash } from 'lucide-react';
+import { Settings, Shield, Save, RotateCcw, Hash, DollarSign } from 'lucide-react';
 
 // Define proper TypeScript interfaces
 interface AdKeys {
@@ -22,6 +22,7 @@ interface AdKeys {
   bannerAd: string;
   rewardedAd: string;
   adCounter: number;
+  subscriptionAmount: number; // New field added
 }
 
 interface SessionUser {
@@ -41,13 +42,15 @@ const SettingsDialog: React.FC = () => {
     intestrialAd: "",
     bannerAd: "",
     rewardedAd: "",
-    adCounter: 0
+    adCounter: 0,
+    subscriptionAmount: 0 // New field added
   });
   const [originalKeys, setOriginalKeys] = useState<AdKeys>({
     intestrialAd: "",
     bannerAd: "",
     rewardedAd: "",
-    adCounter: 0
+    adCounter: 0,
+    subscriptionAmount: 0 // New field added
   });
   const [loading, setLoading] = useState<boolean>(false);
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -63,7 +66,8 @@ const SettingsDialog: React.FC = () => {
       adKeys.intestrialAd !== originalKeys.intestrialAd ||
       adKeys.bannerAd !== originalKeys.bannerAd ||
       adKeys.rewardedAd !== originalKeys.rewardedAd ||
-      adKeys.adCounter !== originalKeys.adCounter;
+      adKeys.adCounter !== originalKeys.adCounter ||
+      adKeys.subscriptionAmount !== originalKeys.subscriptionAmount; // New field added
     setHasChanges(changed);
   }, [adKeys, originalKeys]);
 
@@ -82,7 +86,8 @@ const SettingsDialog: React.FC = () => {
             intestrialAd: data.data.intestrialAd || "",
             bannerAd: data.data.bannerAd || "",
             rewardedAd: data.data.rewardedAd || "",
-            adCounter: Number(data.data.adCounter) || 0
+            adCounter: Number(data.data.adCounter) || 0,
+            subscriptionAmount: Number(data.data.subscriptionAmount) || 0 // New field added
           };
           setAdKeys(keysData);
           setOriginalKeys(keysData);
@@ -92,7 +97,8 @@ const SettingsDialog: React.FC = () => {
             intestrialAd: "",
             bannerAd: "",
             rewardedAd: "",
-            adCounter: 0
+            adCounter: 0,
+            subscriptionAmount: 0 // New field added
           };
           setAdKeys(emptyKeys);
           setOriginalKeys(emptyKeys);
@@ -109,19 +115,19 @@ const SettingsDialog: React.FC = () => {
   }, [isOpen, isSuperAdmin]);
 
   // Handle input changes for string fields
-  const handleInputChange = (field: keyof Omit<AdKeys, 'adCounter'>, value: string) => {
+  const handleInputChange = (field: keyof Omit<AdKeys, 'adCounter' | 'subscriptionAmount'>, value: string) => {
     setAdKeys(prev => ({
       ...prev,
       [field]: value
     }));
   };
 
-  // Handle number input changes
-  const handleNumberChange = (value: string) => {
-    const numericValue = value === '' ? 0 : parseInt(value) || 0;
+  // Handle number input changes - updated to handle both number fields
+  const handleNumberChange = (field: 'adCounter' | 'subscriptionAmount', value: string) => {
+    const numericValue = value === '' ? 0 : parseFloat(value) || 0;
     setAdKeys(prev => ({
       ...prev,
-      adCounter: numericValue
+      [field]: numericValue
     }));
   };
 
@@ -164,7 +170,8 @@ const SettingsDialog: React.FC = () => {
         intestrialAd: adKeys.intestrialAd.trim(),
         bannerAd: adKeys.bannerAd.trim(),
         rewardedAd: adKeys.rewardedAd.trim(),
-        adCounter: adKeys.adCounter
+        adCounter: adKeys.adCounter,
+        subscriptionAmount: adKeys.subscriptionAmount // New field added
       };
 
       const response = await fetch('/api/create-keys', {
@@ -225,7 +232,7 @@ const SettingsDialog: React.FC = () => {
             </div>
           </DialogTitle>
           <DialogDescription>
-            Manage advertisement unit IDs and counter settings for your application. These settings control which ads are displayed across the platform.
+            Manage advertisement unit IDs, counter settings, and subscription pricing for your application. These settings control ads and monetization across the platform.
           </DialogDescription>
         </DialogHeader>
 
@@ -243,7 +250,7 @@ const SettingsDialog: React.FC = () => {
                 <span>Super Admin Access</span>
               </div>
               <p className="text-purple-600 text-sm">
-                You have full administrative privileges to manage advertisement settings for the entire platform.
+                You have full administrative privileges to manage advertisement settings and subscription pricing for the entire platform.
               </p>
             </div>
 
@@ -257,7 +264,7 @@ const SettingsDialog: React.FC = () => {
                 id="adCounter"
                 type="number"
                 value={adKeys.adCounter || ""}
-                onChange={(e) => handleNumberChange(e.target.value)}
+                onChange={(e) => handleNumberChange('adCounter', e.target.value)}
                 placeholder="Enter ad counter value (e.g., 5, 10)"
                 min="0"
                 className="w-full transition-all duration-200 focus:ring-2 focus:ring-purple-500"
@@ -265,6 +272,28 @@ const SettingsDialog: React.FC = () => {
               />
               <p className="text-xs text-gray-500">
                 Controls how many ads are shown before displaying the next ad in rotation.
+              </p>
+            </div>
+
+            {/* Subscription Amount Field - NEW */}
+            <div className="space-y-2">
+              <Label htmlFor="subscriptionAmount" className="text-sm font-semibold flex items-center gap-2">
+                Subscription Amount
+                <DollarSign className="w-3 h-3 text-purple-500" />
+              </Label>
+              <Input
+                id="subscriptionAmount"
+                type="number"
+                value={adKeys.subscriptionAmount || ""}
+                onChange={(e) => handleNumberChange('subscriptionAmount', e.target.value)}
+                placeholder="Enter subscription price (e.g., 9.99, 29.99)"
+                min="0"
+                step="0.01"
+                className="w-full transition-all duration-200 focus:ring-2 focus:ring-purple-500"
+                disabled={loading}
+              />
+              <p className="text-xs text-gray-500">
+                Monthly subscription price for premium features and ad-free experience.
               </p>
             </div>
 
