@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Settings, Shield, Save, RotateCcw } from 'lucide-react';
+import { Settings, Shield, Save, RotateCcw, Hash } from 'lucide-react';
 
 // Define proper TypeScript interfaces
 interface AdKeys {
@@ -21,6 +21,7 @@ interface AdKeys {
   intestrialAd: string;
   bannerAd: string;
   rewardedAd: string;
+  adCounter: number;
 }
 
 interface SessionUser {
@@ -39,12 +40,14 @@ const SettingsDialog: React.FC = () => {
   const [adKeys, setAdKeys] = useState<AdKeys>({
     intestrialAd: "",
     bannerAd: "",
-    rewardedAd: ""
+    rewardedAd: "",
+    adCounter: 0
   });
   const [originalKeys, setOriginalKeys] = useState<AdKeys>({
     intestrialAd: "",
     bannerAd: "",
-    rewardedAd: ""
+    rewardedAd: "",
+    adCounter: 0
   });
   const [loading, setLoading] = useState<boolean>(false);
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -59,7 +62,8 @@ const SettingsDialog: React.FC = () => {
     const changed = 
       adKeys.intestrialAd !== originalKeys.intestrialAd ||
       adKeys.bannerAd !== originalKeys.bannerAd ||
-      adKeys.rewardedAd !== originalKeys.rewardedAd;
+      adKeys.rewardedAd !== originalKeys.rewardedAd ||
+      adKeys.adCounter !== originalKeys.adCounter;
     setHasChanges(changed);
   }, [adKeys, originalKeys]);
 
@@ -75,9 +79,10 @@ const SettingsDialog: React.FC = () => {
         
         if (data.success && data.data) {
           const keysData: AdKeys = {
-            intestrialAd: data.data.intestrialAd || data.data.intestrialAd || "",
+            intestrialAd: data.data.intestrialAd || "",
             bannerAd: data.data.bannerAd || "",
-            rewardedAd: data.data.rewardedAd || ""
+            rewardedAd: data.data.rewardedAd || "",
+            adCounter: Number(data.data.adCounter) || 0
           };
           setAdKeys(keysData);
           setOriginalKeys(keysData);
@@ -86,7 +91,8 @@ const SettingsDialog: React.FC = () => {
           const emptyKeys: AdKeys = {
             intestrialAd: "",
             bannerAd: "",
-            rewardedAd: ""
+            rewardedAd: "",
+            adCounter: 0
           };
           setAdKeys(emptyKeys);
           setOriginalKeys(emptyKeys);
@@ -102,11 +108,20 @@ const SettingsDialog: React.FC = () => {
     fetchAdKeys();
   }, [isOpen, isSuperAdmin]);
 
-  // Handle input changes
-  const handleInputChange = (field: keyof AdKeys, value: string) => {
+  // Handle input changes for string fields
+  const handleInputChange = (field: keyof Omit<AdKeys, 'adCounter'>, value: string) => {
     setAdKeys(prev => ({
       ...prev,
       [field]: value
+    }));
+  };
+
+  // Handle number input changes
+  const handleNumberChange = (value: string) => {
+    const numericValue = value === '' ? 0 : parseInt(value) || 0;
+    setAdKeys(prev => ({
+      ...prev,
+      adCounter: numericValue
     }));
   };
 
@@ -148,7 +163,8 @@ const SettingsDialog: React.FC = () => {
       const updateData = {
         intestrialAd: adKeys.intestrialAd.trim(),
         bannerAd: adKeys.bannerAd.trim(),
-        rewardedAd: adKeys.rewardedAd.trim()
+        rewardedAd: adKeys.rewardedAd.trim(),
+        adCounter: adKeys.adCounter
       };
 
       const response = await fetch('/api/create-keys', {
@@ -209,7 +225,7 @@ const SettingsDialog: React.FC = () => {
             </div>
           </DialogTitle>
           <DialogDescription>
-            Manage advertisement unit IDs for your application. These settings control which ads are displayed across the platform.
+            Manage advertisement unit IDs and counter settings for your application. These settings control which ads are displayed across the platform.
           </DialogDescription>
         </DialogHeader>
 
@@ -228,6 +244,27 @@ const SettingsDialog: React.FC = () => {
               </div>
               <p className="text-purple-600 text-sm">
                 You have full administrative privileges to manage advertisement settings for the entire platform.
+              </p>
+            </div>
+
+            {/* Ad Counter Field */}
+            <div className="space-y-2">
+              <Label htmlFor="adCounter" className="text-sm font-semibold flex items-center gap-2">
+                Ad Counter
+                <Hash className="w-3 h-3 text-purple-500" />
+              </Label>
+              <Input
+                id="adCounter"
+                type="number"
+                value={adKeys.adCounter || ""}
+                onChange={(e) => handleNumberChange(e.target.value)}
+                placeholder="Enter ad counter value (e.g., 5, 10)"
+                min="0"
+                className="w-full transition-all duration-200 focus:ring-2 focus:ring-purple-500"
+                disabled={loading}
+              />
+              <p className="text-xs text-gray-500">
+                Controls how many ads are shown before displaying the next ad in rotation.
               </p>
             </div>
 

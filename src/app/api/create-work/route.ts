@@ -100,6 +100,96 @@
 // }
 
 
+// import dbConnect from "@/lib/dbConnect";
+// import { getServerSession, User } from "next-auth";
+// import { authOptions } from "../auth/[...nextauth]/options";
+// import Work from "@/model/Work";
+// import mongoose from "mongoose";
+// import { v2 as cloudinary } from "cloudinary";
+// import redlock from "@/lib/redlock";
+
+// // interface Params {
+// //   params: { adminid: string };
+// // }
+
+// cloudinary.config({
+//   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+//   api_key: process.env.CLOUDINARY_API_KEY,
+//   api_secret: process.env.CLOUDINARY_API_SECRET,
+//   secure: true,
+// });
+
+// interface CloudinaryUploadResponse {
+//   secure_url: string;
+// }
+
+// export async function POST(req: Request) {
+//   await dbConnect();
+//   const session = await getServerSession(authOptions);
+//   const admin: User = session?.user as User;
+
+//   if (!admin || admin.role !== "admin") {
+//     return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
+//   }
+
+//   const adminid = new mongoose.Types.ObjectId(session?.user._id);
+//   const lockKey = `upload-lock:${adminid}`;
+
+//   let lock;
+//   try {
+//     lock = await redlock.acquire([lockKey], 30_000);
+
+//     const formData = await req.formData();
+//     const image = formData.get("image") as File | null;
+//     const prompt = formData.get("prompt") as string;
+//     const categoryId = formData.get("categoryId") as string;
+
+//     if (!image || !prompt || !categoryId) {
+//       return Response.json(
+//         { success: false, message: "Missing required fields" },
+//         { status: 400 }
+//       );
+//     }
+
+//     const buffer = Buffer.from(await image.arrayBuffer());
+
+//     const uploadResult = await new Promise<CloudinaryUploadResponse>((resolve, reject) => {
+//       const uploadStream = cloudinary.uploader.upload_stream(
+//         { folder: "Image-prompt works", resource_type: "image" },
+//         (error, result) => {
+//           if (error) reject(error);
+//           else resolve(result as CloudinaryUploadResponse);
+//         }
+//       );
+//       uploadStream.end(buffer);
+//     });
+
+//     await new Work({
+//       adminId: adminid,
+//       prompt,
+//       imageUrl: uploadResult.secure_url,
+//       categoryId: new mongoose.Types.ObjectId(categoryId),
+//     }).save();
+
+//     return Response.json({ success: true, message: "Work created successfully" });
+//   } catch (err) {
+//     console.error("Redlock error:", err);
+//     return Response.json(
+//       { success: false, message: "Another upload is in progress. Try again later." },
+//       { status: 429 }
+//     );
+//   } finally {
+//     if (lock) {
+//       try {
+//         await redlock.release(lock);
+//       } catch (releaseErr) {
+//         console.error("Failed to release lock:", releaseErr);
+//       }
+//     }
+//   }
+// }
+
+
 import dbConnect from "@/lib/dbConnect";
 import { getServerSession, User } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/options";
@@ -107,10 +197,7 @@ import Work from "@/model/Work";
 import mongoose from "mongoose";
 import { v2 as cloudinary } from "cloudinary";
 import redlock from "@/lib/redlock";
-
-// interface Params {
-//   params: { adminid: string };
-// }
+import { Readable } from "stream";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -123,13 +210,24 @@ interface CloudinaryUploadResponse {
   secure_url: string;
 }
 
+// Disable default body parsing and set size limit
+export const config = {
+  api: {
+    bodyParser: false,
+    sizeLimit: "50mb", // can increase further if needed
+  },
+};
+
 export async function POST(req: Request) {
   await dbConnect();
   const session = await getServerSession(authOptions);
   const admin: User = session?.user as User;
 
   if (!admin || admin.role !== "admin") {
-    return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    return Response.json(
+      { success: false, message: "Unauthorized" },
+      { status: 401 }
+    );
   }
 
   const adminid = new mongoose.Types.ObjectId(session?.user._id);
@@ -151,18 +249,24 @@ export async function POST(req: Request) {
       );
     }
 
-    const buffer = Buffer.from(await image.arrayBuffer());
+    // Convert File to a readable stream
+    const arrayBuffer = await image.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const stream = Readable.from(buffer);
 
-    const uploadResult = await new Promise<CloudinaryUploadResponse>((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        { folder: "Image-prompt works", resource_type: "image" },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result as CloudinaryUploadResponse);
-        }
-      );
-      uploadStream.end(buffer);
-    });
+    // Upload stream directly to Cloudinary
+    const uploadResult = await new Promise<CloudinaryUploadResponse>(
+      (resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          { folder: "Image-prompt works", resource_type: "image" },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result as CloudinaryUploadResponse);
+          }
+        );
+        stream.pipe(uploadStream);
+      }
+    );
 
     await new Work({
       adminId: adminid,
@@ -171,11 +275,14 @@ export async function POST(req: Request) {
       categoryId: new mongoose.Types.ObjectId(categoryId),
     }).save();
 
-    return Response.json({ success: true, message: "Work created successfully" });
+    return Response.json({
+      success: true,
+      message: "Work created successfully",
+    });
   } catch (err) {
-    console.error("Redlock error:", err);
+    console.error("Redlock or upload error:", err);
     return Response.json(
-      { success: false, message: "Another upload is in progress. Try again later." },
+      { success: false, message: "Another upload is in progress or upload failed." },
       { status: 429 }
     );
   } finally {
