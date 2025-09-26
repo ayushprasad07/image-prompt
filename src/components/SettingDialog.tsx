@@ -265,7 +265,7 @@ const SettingsDialog: React.FC = () => {
                 type="number"
                 value={adKeys.adCounter || ""}
                 onChange={(e) => handleNumberChange('adCounter', e.target.value)}
-                placeholder="Enter ad counter value (e.g., 5, 10)"
+                placeholder="Enter ad counter value"
                 min="0"
                 className="w-full transition-all duration-200 focus:ring-2 focus:ring-purple-500"
                 disabled={loading}
@@ -286,7 +286,7 @@ const SettingsDialog: React.FC = () => {
                 type="number"
                 value={adKeys.subscriptionAmount || ""}
                 onChange={(e) => handleNumberChange('subscriptionAmount', e.target.value)}
-                placeholder="Enter subscription price (e.g., 9.99, 29.99)"
+                placeholder="Enter subscription price"
                 min="0"
                 step="0.01"
                 className="w-full transition-all duration-200 focus:ring-2 focus:ring-purple-500"
@@ -308,7 +308,7 @@ const SettingsDialog: React.FC = () => {
                 type="text"
                 value={adKeys.intestrialAd}
                 onChange={(e) => handleInputChange('intestrialAd', e.target.value)}
-                placeholder="Enter interstitial ad unit ID (e.g., ca-app-pub-xxxxx/xxxxx)"
+                placeholder="Enter interstitial ad unit ID"
                 className="w-full transition-all duration-200 focus:ring-2 focus:ring-purple-500"
                 disabled={loading}
               />
@@ -328,7 +328,7 @@ const SettingsDialog: React.FC = () => {
                 type="text"
                 value={adKeys.bannerAd}
                 onChange={(e) => handleInputChange('bannerAd', e.target.value)}
-                placeholder="Enter banner ad unit ID (e.g., ca-app-pub-xxxxx/xxxxx)"
+                placeholder="Enter banner ad unit ID "
                 className="w-full transition-all duration-200 focus:ring-2 focus:ring-purple-500"
                 disabled={loading}
               />
@@ -348,7 +348,7 @@ const SettingsDialog: React.FC = () => {
                 type="text"
                 value={adKeys.rewardedAd}
                 onChange={(e) => handleInputChange('rewardedAd', e.target.value)}
-                placeholder="Enter rewarded ad unit ID (e.g., ca-app-pub-xxxxx/xxxxx)"
+                placeholder="Enter rewarded ad unit ID"
                 className="w-full transition-all duration-200 focus:ring-2 focus:ring-purple-500"
                 disabled={loading}
               />
