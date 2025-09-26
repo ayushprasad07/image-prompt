@@ -133,16 +133,7 @@ const SignIn = () => {
                         </div>
                     </div>
 
-                    {/* Remember Me */}
-                    <div className="flex items-center justify-between animate-slide-up [animation-delay:500ms]">
-                        <label className="flex items-center group cursor-pointer">
-                            <input type="checkbox" className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 transition-all duration-200" />
-                            <span className="ml-2 text-sm text-gray-600 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200 transition-colors duration-200">Remember me</span>
-                        </label>
-                        <a href="#" className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 transition-colors duration-200 hover:underline">
-                            Forgot password?
-                        </a>
-                    </div>
+                    
 
                     {/* Submit Button */}
                     <button
