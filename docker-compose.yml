@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  nextjs-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: image-prompt-nextjs
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      MONGO_URI: ${MONGO_URI}
+      REDIS_URL: ${REDIS_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      SUPERADMIN_USERNAME: ${SUPERADMIN_USERNAME}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD}
+    networks:
+      - image-prompt-network
+    volumes:
+      - uploads:/app/uploads
+
+  nginx:
+    image: nginx:alpine
+    container_name: image-prompt-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - nextjs-app
+    networks:
+      - image-prompt-network
+
+volumes:
+  uploads:
+
+networks:
+  image-prompt-network:
+    driver: bridge
