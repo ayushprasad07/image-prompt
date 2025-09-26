@@ -7,6 +7,8 @@ services:
       dockerfile: Dockerfile
     container_name: image-prompt-nextjs
     restart: unless-stopped
+    env_file:
+      - .env.production 
     environment:
       NODE_ENV: production
       MONGO_URI: ${MONGO_URI}
