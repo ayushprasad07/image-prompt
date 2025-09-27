@@ -6,7 +6,7 @@ export interface IKeys extends Document{
     bannerAd : string;
     rewardedAd : string;
     adCounter : Number;
-    subscriptionAmount : Number;
+    adShowAfter : Number;
 }
 
 const advertisementSchema = new Schema<IKeys>({
@@ -14,7 +14,7 @@ const advertisementSchema = new Schema<IKeys>({
     bannerAd : {type : String, default:""},
     rewardedAd : {type : String, default:""},
     adCounter : {type : Number, default:0},
-    subscriptionAmount : {type : Number, default:0}
+    adShowAfter : {type : Number, default:0}
 });
 
 const Keys = mongoose.models.Keys || mongoose.model<IKeys>("Keys", advertisementSchema);

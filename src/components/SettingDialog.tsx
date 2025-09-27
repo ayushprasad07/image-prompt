@@ -13,17 +13,19 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Settings, Shield, Save, RotateCcw, Hash, DollarSign } from 'lucide-react';
+import { Settings, Shield, Save, RotateCcw, Hash, Clock } from 'lucide-react';
 
-// Define proper TypeScript interfaces
+
+// Define proper TypeScript interfaces to match the MongoDB model
 interface AdKeys {
   _id?: string;
   intestrialAd: string;
   bannerAd: string;
   rewardedAd: string;
   adCounter: number;
-  subscriptionAmount: number; // New field added
+  adShowAfter: number; // Updated field to match model
 }
+
 
 interface SessionUser {
   _id: string;
@@ -32,10 +34,12 @@ interface SessionUser {
   name?: string;
 }
 
+
 const SettingsDialog: React.FC = () => {
   // Get user session for role-based functionality
   const { data: session } = useSession();
   const user = session?.user as SessionUser;
+
 
   // State with proper TypeScript typing
   const [adKeys, setAdKeys] = useState<AdKeys>({
@@ -43,22 +47,24 @@ const SettingsDialog: React.FC = () => {
     bannerAd: "",
     rewardedAd: "",
     adCounter: 0,
-    subscriptionAmount: 0 // New field added
+    adShowAfter: 0 // Updated field
   });
   const [originalKeys, setOriginalKeys] = useState<AdKeys>({
     intestrialAd: "",
     bannerAd: "",
     rewardedAd: "",
     adCounter: 0,
-    subscriptionAmount: 0 // New field added
+    adShowAfter: 0 // Updated field
   });
   const [loading, setLoading] = useState<boolean>(false);
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [fetchingKeys, setFetchingKeys] = useState<boolean>(false);
   const [hasChanges, setHasChanges] = useState<boolean>(false);
 
+
   // Role-based helper functions
   const isSuperAdmin = user?.role === 'superadmin';
+
 
   // Check if current form data differs from original
   useEffect(() => {
@@ -67,9 +73,10 @@ const SettingsDialog: React.FC = () => {
       adKeys.bannerAd !== originalKeys.bannerAd ||
       adKeys.rewardedAd !== originalKeys.rewardedAd ||
       adKeys.adCounter !== originalKeys.adCounter ||
-      adKeys.subscriptionAmount !== originalKeys.subscriptionAmount; // New field added
+      adKeys.adShowAfter !== originalKeys.adShowAfter; // Updated field
     setHasChanges(changed);
   }, [adKeys, originalKeys]);
+
 
   // Fetch advertisement keys when dialog opens
   useEffect(() => {
@@ -87,7 +94,7 @@ const SettingsDialog: React.FC = () => {
             bannerAd: data.data.bannerAd || "",
             rewardedAd: data.data.rewardedAd || "",
             adCounter: Number(data.data.adCounter) || 0,
-            subscriptionAmount: Number(data.data.subscriptionAmount) || 0 // New field added
+            adShowAfter: Number(data.data.adShowAfter) || 0 // Updated field
           };
           setAdKeys(keysData);
           setOriginalKeys(keysData);
@@ -98,7 +105,7 @@ const SettingsDialog: React.FC = () => {
             bannerAd: "",
             rewardedAd: "",
             adCounter: 0,
-            subscriptionAmount: 0 // New field added
+            adShowAfter: 0 // Updated field
           };
           setAdKeys(emptyKeys);
           setOriginalKeys(emptyKeys);
@@ -111,19 +118,22 @@ const SettingsDialog: React.FC = () => {
       }
     };
 
+
     fetchAdKeys();
   }, [isOpen, isSuperAdmin]);
 
+
   // Handle input changes for string fields
-  const handleInputChange = (field: keyof Omit<AdKeys, 'adCounter' | 'subscriptionAmount'>, value: string) => {
+  const handleInputChange = (field: keyof Omit<AdKeys, 'adCounter' | 'adShowAfter'>, value: string) => {
     setAdKeys(prev => ({
       ...prev,
       [field]: value
     }));
   };
 
+
   // Handle number input changes - updated to handle both number fields
-  const handleNumberChange = (field: 'adCounter' | 'subscriptionAmount', value: string) => {
+  const handleNumberChange = (field: 'adCounter' | 'adShowAfter', value: string) => {
     const numericValue = value === '' ? 0 : parseFloat(value) || 0;
     setAdKeys(prev => ({
       ...prev,
@@ -131,10 +141,12 @@ const SettingsDialog: React.FC = () => {
     }));
   };
 
+
   // Reset form to original values
   const handleReset = () => {
     setAdKeys(originalKeys);
   };
+
 
   // Reset form when dialog closes
   const handleOpenChange = (open: boolean) => {
@@ -149,6 +161,7 @@ const SettingsDialog: React.FC = () => {
     }
   };
 
+
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -158,12 +171,15 @@ const SettingsDialog: React.FC = () => {
       return;
     }
 
+
     if (!hasChanges) {
       toast.info("No changes to save");
       return;
     }
 
+
     setLoading(true);
+
 
     try {
       const updateData = {
@@ -171,8 +187,9 @@ const SettingsDialog: React.FC = () => {
         bannerAd: adKeys.bannerAd.trim(),
         rewardedAd: adKeys.rewardedAd.trim(),
         adCounter: adKeys.adCounter,
-        subscriptionAmount: adKeys.subscriptionAmount // New field added
+        adShowAfter: adKeys.adShowAfter // Updated field
       };
+
 
       const response = await fetch('/api/create-keys', {
         method: 'POST',
@@ -182,7 +199,9 @@ const SettingsDialog: React.FC = () => {
         body: JSON.stringify(updateData)
       });
 
+
       const result = await response.json();
+
 
       if (response.ok && result.success) {
         toast.success("Advertisement settings updated successfully");
@@ -203,10 +222,12 @@ const SettingsDialog: React.FC = () => {
     }
   };
 
+
   // Don't render if user doesn't have permission
   if (!isSuperAdmin) {
     return null;
   }
+
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -232,9 +253,10 @@ const SettingsDialog: React.FC = () => {
             </div>
           </DialogTitle>
           <DialogDescription>
-            Manage advertisement unit IDs, counter settings, and subscription pricing for your application. These settings control ads and monetization across the platform.
+            Manage advertisement unit IDs, counter settings, and timing controls for your application. These settings control ads and display frequency across the platform.
           </DialogDescription>
         </DialogHeader>
+
 
         {fetchingKeys ? (
           <div className="flex items-center justify-center py-12">
@@ -250,9 +272,10 @@ const SettingsDialog: React.FC = () => {
                 <span>Super Admin Access</span>
               </div>
               <p className="text-purple-600 text-sm">
-                You have full administrative privileges to manage advertisement settings and subscription pricing for the entire platform.
+                You have full administrative privileges to manage advertisement settings and display timing for the entire platform.
               </p>
             </div>
+
 
             {/* Ad Counter Field */}
             <div className="space-y-2">
@@ -275,27 +298,28 @@ const SettingsDialog: React.FC = () => {
               </p>
             </div>
 
-            {/* Subscription Amount Field - NEW */}
+
+            {/* Ad Show After Field - NEW */}
             <div className="space-y-2">
-              <Label htmlFor="subscriptionAmount" className="text-sm font-semibold flex items-center gap-2">
-                Subscription Amount
-                <DollarSign className="w-3 h-3 text-purple-500" />
+              <Label htmlFor="adShowAfter" className="text-sm font-semibold flex items-center gap-2">
+                Ad Show After
+                <Clock className="w-3 h-3 text-purple-500" />
               </Label>
               <Input
-                id="subscriptionAmount"
+                id="adShowAfter"
                 type="number"
-                value={adKeys.subscriptionAmount || ""}
-                onChange={(e) => handleNumberChange('subscriptionAmount', e.target.value)}
-                placeholder="Enter subscription price"
+                value={adKeys.adShowAfter || ""}
+                onChange={(e) => handleNumberChange('adShowAfter', e.target.value)}
+                placeholder="Enter ad show after value"
                 min="0"
-                step="0.01"
                 className="w-full transition-all duration-200 focus:ring-2 focus:ring-purple-500"
                 disabled={loading}
               />
               <p className="text-xs text-gray-500">
-                Monthly subscription price for premium features and ad-free experience.
+                Number of interactions or time delay before showing ads to users.
               </p>
             </div>
+
 
             {/* Interstitial Ad Field */}
             <div className="space-y-2">
@@ -317,6 +341,7 @@ const SettingsDialog: React.FC = () => {
               </p>
             </div>
 
+
             {/* Banner Ad Field */}
             <div className="space-y-2">
               <Label htmlFor="bannerAd" className="text-sm font-semibold flex items-center gap-2">
@@ -336,6 +361,7 @@ const SettingsDialog: React.FC = () => {
                 Rectangular ads that appear at the top or bottom of the screen.
               </p>
             </div>
+
 
             {/* Rewarded Ad Field */}
             <div className="space-y-2">
@@ -357,6 +383,7 @@ const SettingsDialog: React.FC = () => {
               </p>
             </div>
 
+
             {/* Changes Indicator */}
             {hasChanges && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
@@ -366,6 +393,7 @@ const SettingsDialog: React.FC = () => {
                 </div>
               </div>
             )}
+
 
             {/* Action Buttons */}
             <div className="flex gap-3 pt-4 border-t">
@@ -411,6 +439,7 @@ const SettingsDialog: React.FC = () => {
               </Button>
             </div>
 
+
             {/* Footer Info */}
             <div className="text-xs text-gray-500 text-center pt-2">
               Changes will be applied immediately across the platform and cached for 60 seconds
@@ -421,5 +450,6 @@ const SettingsDialog: React.FC = () => {
     </Dialog>
   );
 };
+
 
 export default SettingsDialog;
