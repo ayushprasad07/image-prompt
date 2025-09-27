@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Settings, Shield, Save, RotateCcw, Hash, Clock } from 'lucide-react';
+import { Settings, Shield, Save, RotateCcw, Hash, Clock, Smartphone } from 'lucide-react';
 
 
 // Define proper TypeScript interfaces to match the MongoDB model
@@ -22,8 +22,9 @@ interface AdKeys {
   intestrialAd: string;
   bannerAd: string;
   rewardedAd: string;
+  nativeAd: string; // NEW: Added nativeAd field
   adCounter: number;
-  adShowAfter: number; // Updated field to match model
+  adShowAfter: number;
 }
 
 
@@ -46,15 +47,17 @@ const SettingsDialog: React.FC = () => {
     intestrialAd: "",
     bannerAd: "",
     rewardedAd: "",
+    nativeAd: "", // NEW: Added nativeAd field
     adCounter: 0,
-    adShowAfter: 0 // Updated field
+    adShowAfter: 0
   });
   const [originalKeys, setOriginalKeys] = useState<AdKeys>({
     intestrialAd: "",
     bannerAd: "",
     rewardedAd: "",
+    nativeAd: "", // NEW: Added nativeAd field
     adCounter: 0,
-    adShowAfter: 0 // Updated field
+    adShowAfter: 0
   });
   const [loading, setLoading] = useState<boolean>(false);
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -72,8 +75,9 @@ const SettingsDialog: React.FC = () => {
       adKeys.intestrialAd !== originalKeys.intestrialAd ||
       adKeys.bannerAd !== originalKeys.bannerAd ||
       adKeys.rewardedAd !== originalKeys.rewardedAd ||
+      adKeys.nativeAd !== originalKeys.nativeAd || // NEW: Added nativeAd to change detection
       adKeys.adCounter !== originalKeys.adCounter ||
-      adKeys.adShowAfter !== originalKeys.adShowAfter; // Updated field
+      adKeys.adShowAfter !== originalKeys.adShowAfter;
     setHasChanges(changed);
   }, [adKeys, originalKeys]);
 
@@ -93,8 +97,9 @@ const SettingsDialog: React.FC = () => {
             intestrialAd: data.data.intestrialAd || "",
             bannerAd: data.data.bannerAd || "",
             rewardedAd: data.data.rewardedAd || "",
+            nativeAd: data.data.nativeAd || "", // NEW: Added nativeAd to fetch logic
             adCounter: Number(data.data.adCounter) || 0,
-            adShowAfter: Number(data.data.adShowAfter) || 0 // Updated field
+            adShowAfter: Number(data.data.adShowAfter) || 0
           };
           setAdKeys(keysData);
           setOriginalKeys(keysData);
@@ -104,8 +109,9 @@ const SettingsDialog: React.FC = () => {
             intestrialAd: "",
             bannerAd: "",
             rewardedAd: "",
+            nativeAd: "", // NEW: Added nativeAd to empty state
             adCounter: 0,
-            adShowAfter: 0 // Updated field
+            adShowAfter: 0
           };
           setAdKeys(emptyKeys);
           setOriginalKeys(emptyKeys);
@@ -123,7 +129,7 @@ const SettingsDialog: React.FC = () => {
   }, [isOpen, isSuperAdmin]);
 
 
-  // Handle input changes for string fields
+  // Handle input changes for string fields - Updated to include nativeAd
   const handleInputChange = (field: keyof Omit<AdKeys, 'adCounter' | 'adShowAfter'>, value: string) => {
     setAdKeys(prev => ({
       ...prev,
@@ -132,7 +138,7 @@ const SettingsDialog: React.FC = () => {
   };
 
 
-  // Handle number input changes - updated to handle both number fields
+  // Handle number input changes
   const handleNumberChange = (field: 'adCounter' | 'adShowAfter', value: string) => {
     const numericValue = value === '' ? 0 : parseFloat(value) || 0;
     setAdKeys(prev => ({
@@ -186,8 +192,9 @@ const SettingsDialog: React.FC = () => {
         intestrialAd: adKeys.intestrialAd.trim(),
         bannerAd: adKeys.bannerAd.trim(),
         rewardedAd: adKeys.rewardedAd.trim(),
+        nativeAd: adKeys.nativeAd.trim(), // NEW: Added nativeAd to update data
         adCounter: adKeys.adCounter,
-        adShowAfter: adKeys.adShowAfter // Updated field
+        adShowAfter: adKeys.adShowAfter
       };
 
 
@@ -299,7 +306,7 @@ const SettingsDialog: React.FC = () => {
             </div>
 
 
-            {/* Ad Show After Field - NEW */}
+            {/* Ad Show After Field */}
             <div className="space-y-2">
               <Label htmlFor="adShowAfter" className="text-sm font-semibold flex items-center gap-2">
                 Ad Show After
@@ -353,7 +360,7 @@ const SettingsDialog: React.FC = () => {
                 type="text"
                 value={adKeys.bannerAd}
                 onChange={(e) => handleInputChange('bannerAd', e.target.value)}
-                placeholder="Enter banner ad unit ID "
+                placeholder="Enter banner ad unit ID"
                 className="w-full transition-all duration-200 focus:ring-2 focus:ring-purple-500"
                 disabled={loading}
               />
@@ -380,6 +387,27 @@ const SettingsDialog: React.FC = () => {
               />
               <p className="text-xs text-gray-500">
                 Video ads that users can watch to earn rewards or bonuses.
+              </p>
+            </div>
+
+
+            {/* Native Ad Field - NEW */}
+            <div className="space-y-2">
+              <Label htmlFor="nativeAd" className="text-sm font-semibold flex items-center gap-2">
+                Native Ad ID
+                <Smartphone className="w-3 h-3 text-purple-500" />
+              </Label>
+              <Input
+                id="nativeAd"
+                type="text"
+                value={adKeys.nativeAd}
+                onChange={(e) => handleInputChange('nativeAd', e.target.value)}
+                placeholder="Enter native ad unit ID"
+                className="w-full transition-all duration-200 focus:ring-2 focus:ring-purple-500"
+                disabled={loading}
+              />
+              <p className="text-xs text-gray-500">
+                Native ads that blend seamlessly with your app's content and design.
               </p>
             </div>
 
