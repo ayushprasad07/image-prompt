@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 // /app/api/fcm/send-to-all/route.ts
 import { getServerSession, User } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
