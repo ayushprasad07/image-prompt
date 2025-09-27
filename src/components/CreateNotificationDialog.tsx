@@ -101,7 +101,7 @@ const CreateNotificationDialog: React.FC = () => {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/fcm/send-to-all", {
+      const response = await fetch("/api/send-to-all", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json" 
