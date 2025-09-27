@@ -10,6 +10,8 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+ENV NEXT_SKIP_BUILD_STATIC_GENERATION=true
+
 # Build the app
 RUN npm run build
 
