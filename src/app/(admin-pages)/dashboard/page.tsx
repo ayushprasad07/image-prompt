@@ -408,7 +408,8 @@ const AdminWorks = () => {
                   {/* Content Section */}
                   <div className="space-y-4">
                     {/* Full Prompt - No truncation */}
-                    <h3 className="text-lg font-bold text-gray-900 leading-7 group-hover:text-blue-600 transition-colors duration-300">
+                    <h3 className="text-lg font-bold text-gray-900 leading-7 group-hover:text-blue-600 transition-colors duration-300
+             break-words hyphens-auto">
                       {work.prompt}
                     </h3>
                     

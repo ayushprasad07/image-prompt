@@ -654,7 +654,8 @@ const AdminWorksPage = () => {
                     {/* Enhanced Content Section */}
                     <div className="space-y-2 sm:space-y-3 lg:space-y-4">
                       {/* Responsive Prompt Text */}
-                      <h3 className="text-sm sm:text-base lg:text-lg font-bold text-gray-900 leading-tight sm:leading-normal group-hover:text-blue-600 transition-colors duration-300 line-clamp-2 sm:line-clamp-3">
+                      <h3 className="text-lg font-bold text-gray-900 leading-7 group-hover:text-blue-600 transition-colors duration-300
+             break-words hyphens-auto">
                         {work.prompt}
                       </h3>
                       
