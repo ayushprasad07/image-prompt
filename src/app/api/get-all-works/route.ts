@@ -3,33 +3,21 @@ import Work from "@/model/Work";
 import redis from "@/lib/redis";
 import "@/model/Category";
 
-//  /api/get-all-works?page=2
-
-// Configurable rate limit
-const RATE_LIMIT = 100; // max requests
-const WINDOW_SECONDS = 60; // per 60s (1 minute)
+const RATE_LIMIT = 150;
+const WINDOW_SECONDS = 60;
 
 async function rateLimit(ip: string): Promise<boolean> {
   const key = `ratelimit:${ip}`;
   const current = await redis.incr(key);
-
-  if (current === 1) {
-    // set expiry only on first increment
-    await redis.expire(key, WINDOW_SECONDS);
-  }
-
+  if (current === 1) await redis.expire(key, WINDOW_SECONDS);
   return current <= RATE_LIMIT;
 }
 
 export async function GET(req: Request) {
   await dbConnect();
 
-  const ip =
-    req.headers.get("x-forwarded-for") ||
-    req.headers.get("x-real-ip") ||
-    "unknown";
+  const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
 
-  // 🔹 Step 0: Apply rate limiting
   const allowed = await rateLimit(ip);
   if (!allowed) {
     return Response.json(
@@ -40,13 +28,12 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const page = parseInt(searchParams.get("page") || "1");
-  const limit = 100; // fixed max
+  const limit = 100;
   const skip = (page - 1) * limit;
 
   const cacheKey = `public:works:page:${page}`;
 
   try {
-    // 🔹 Step 1: Serve from Redis cache
     const cached = await redis.get(cacheKey);
     if (cached) {
       return new Response(cached, {
@@ -58,14 +45,13 @@ export async function GET(req: Request) {
       });
     }
 
-    // 🔹 Step 2: Fetch from MongoDB (cache miss)
     const works = await Work.find({})
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean()
-      .select("_id prompt imageUrl categoryId createdAt")
-      .populate("categoryId","name");
+      .select("_id prompt imageUrl categoryId tags createdAt") // ✅ include tags
+      .populate("categoryId", "name");
 
     const responseData = JSON.stringify({
       success: true,
@@ -75,7 +61,6 @@ export async function GET(req: Request) {
       works,
     });
 
-    // 🔹 Step 3: Cache result in Redis for 30s
     await redis.set(cacheKey, responseData, "EX", 30, "NX");
 
     return new Response(responseData, {

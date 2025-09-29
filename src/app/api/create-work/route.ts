@@ -210,11 +210,10 @@ interface CloudinaryUploadResponse {
   secure_url: string;
 }
 
-// Disable default body parsing and set size limit
 export const config = {
   api: {
     bodyParser: false,
-    sizeLimit: "50mb", // can increase further if needed
+    sizeLimit: "50mb",
   },
 };
 
@@ -241,12 +240,29 @@ export async function POST(req: Request) {
     const image = formData.get("image") as File | null;
     const prompt = formData.get("prompt") as string;
     const categoryId = formData.get("categoryId") as string;
+    const tagsRaw = formData.get("tags") as string | null; // ✅ new field
 
     if (!image || !prompt || !categoryId) {
       return Response.json(
         { success: false, message: "Missing required fields" },
         { status: 400 }
       );
+    }
+
+    // ✅ Parse tags (comma separated or JSON)
+    let tags: string[] = [];
+    if (tagsRaw) {
+      try {
+        if (tagsRaw.startsWith("[")) {
+          // JSON array string like ["tag1","tag2"]
+          tags = JSON.parse(tagsRaw);
+        } else {
+          // Comma separated string like "tag1,tag2"
+          tags = tagsRaw.split(",").map((t) => t.trim());
+        }
+      } catch (e) {
+        console.warn("Invalid tags format, skipping...");
+      }
     }
 
     // Convert File to a readable stream
@@ -273,6 +289,7 @@ export async function POST(req: Request) {
       prompt,
       imageUrl: uploadResult.secure_url,
       categoryId: new mongoose.Types.ObjectId(categoryId),
+      tags, // ✅ save tags
     }).save();
 
     return Response.json({

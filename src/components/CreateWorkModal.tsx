@@ -1,21 +1,21 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Modal,
   ModalBody,
   ModalContent,
   ModalFooter,
   ModalTrigger,
+  useModal,
 } from "./ui/animated-modal";
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Upload, X, Image as ImageIcon, Sparkles } from "lucide-react";
+import { Upload, X, Image as ImageIcon, Sparkles, Tag } from "lucide-react";
 
-// Add interface for props
 interface CreateWorkModalProps {
-  onWorkCreated?: () => void; // Callback function to refresh parent
+  onWorkCreated?: () => void;
 }
 
 export function CreateWorkModal({ onWorkCreated }: CreateWorkModalProps) {
@@ -23,85 +23,92 @@ export function CreateWorkModal({ onWorkCreated }: CreateWorkModalProps) {
   const [imagePreview, setImagePreview] = useState<string>("");
   const [prompt, setPrompt] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [tags, setTags] = useState<string>("");
   const [categories, setCategories] = useState<{ _id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
 
-  // ✅ Fetch categories when component mounts
+  // Nullable element ref (React refs are nullable by design)
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   useEffect(() => {
+    let mounted = true;
     const fetchCategories = async () => {
       try {
         const res = await fetch("/api/get-all-categories");
         const data = await res.json();
+        if (!mounted) return;
         if (res.ok) {
-          setCategories(data.data || []);
+          setCategories(Array.isArray(data.data) ? data.data : []);
         } else {
           toast.error(data.message || "Failed to load categories");
         }
       } catch (err) {
         console.error(err);
-        toast.error("Error fetching categories");
+        if (mounted) toast.error("Error fetching categories");
       }
     };
     fetchCategories();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  // Handle image selection and preview
+  // Post-change reset so subsequent same-file picks trigger onChange
+  const resetFileInputValue = () => {
+    if (fileInputRef.current) {
+      setTimeout(() => {
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }, 0);
+    }
+  };
+
   const handleImageChange = (file: File) => {
-    if (file && file.type.startsWith('image/')) {
+    if (file && file.type.startsWith("image/")) {
       setImage(file);
       const reader = new FileReader();
-      reader.onload = (e) => {
-        setImagePreview(e.target?.result as string);
-      };
+      reader.onload = (e) => setImagePreview((e.target?.result as string) || "");
       reader.readAsDataURL(file);
     } else {
       toast.error("Please select a valid image file");
     }
+    // Post-clear keeps future same-file selections working
+    resetFileInputValue();
   };
 
-  // Handle file input change
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      handleImageChange(file);
-    }
+    const file = e.target.files?.[0] || null;
+    if (file) handleImageChange(file);
   };
 
-  // Handle drag and drop
-  const handleDrag = (e: React.DragEvent) => {
+  const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
-    }
+    if (e.type === "dragenter" || e.type === "dragover") setDragActive(true);
+    if (e.type === "dragleave") setDragActive(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
-    const files = e.dataTransfer.files;
-    if (files && files[0]) {
-      handleImageChange(files[0]);
-    }
+    const files = e.dataTransfer?.files;
+    if (files && files[0]) handleImageChange(files[0]);
   };
 
-  // Remove image
   const removeImage = () => {
     setImage(null);
     setImagePreview("");
+    resetFileInputValue();
   };
 
-  // Reset form function
   const resetForm = () => {
     setImage(null);
     setImagePreview("");
     setPrompt("");
     setCategoryId("");
+    setTags("");
+    resetFileInputValue();
   };
 
   return (
@@ -118,11 +125,12 @@ export function CreateWorkModal({ onWorkCreated }: CreateWorkModalProps) {
         </ModalTrigger>
 
         <ModalBody className="max-w-2xl max-h-[90vh] overflow-hidden">
-          <WorkForm 
+          <WorkForm
             image={image}
             imagePreview={imagePreview}
             prompt={prompt}
             categoryId={categoryId}
+            tags={tags}
             categories={categories}
             loading={loading}
             dragActive={dragActive}
@@ -133,9 +141,11 @@ export function CreateWorkModal({ onWorkCreated }: CreateWorkModalProps) {
             onRemoveImage={removeImage}
             onPromptChange={setPrompt}
             onCategoryChange={setCategoryId}
+            onTagsChange={setTags}
             onWorkCreated={onWorkCreated}
             onResetForm={resetForm}
             setLoading={setLoading}
+            fileInputRef={fileInputRef}
           />
         </ModalBody>
       </Modal>
@@ -143,49 +153,51 @@ export function CreateWorkModal({ onWorkCreated }: CreateWorkModalProps) {
   );
 }
 
-// Separate WorkForm component that has access to useModal
 interface WorkFormProps {
   image: File | null;
   imagePreview: string;
   prompt: string;
   categoryId: string;
+  tags: string;
   categories: { _id: string; name: string }[];
   loading: boolean;
   dragActive: boolean;
   onImageChange: (file: File) => void;
   onFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onDrag: (e: React.DragEvent) => void;
-  onDrop: (e: React.DragEvent) => void;
+  onDrag: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
   onRemoveImage: () => void;
   onPromptChange: (prompt: string) => void;
   onCategoryChange: (categoryId: string) => void;
+  onTagsChange: (tags: string) => void;
   onWorkCreated?: () => void;
   onResetForm: () => void;
   setLoading: (loading: boolean) => void;
+  // Note the nullable element type to avoid TS errors
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
 }
 
-// This component is now inside the Modal context and can use useModal
 function WorkForm({
   image,
   imagePreview,
   prompt,
   categoryId,
+  tags,
   categories,
   loading,
   dragActive,
-  onImageChange,
   onFileInputChange,
   onDrag,
   onDrop,
   onRemoveImage,
   onPromptChange,
   onCategoryChange,
+  onTagsChange,
   onWorkCreated,
   onResetForm,
-  setLoading
+  setLoading,
+  fileInputRef,
 }: WorkFormProps) {
-  // Now we can safely import and use useModal inside the Modal context
-  const { useModal } = require("./ui/animated-modal");
   const { setOpen } = useModal();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -194,33 +206,21 @@ function WorkForm({
       toast.error("Please fill all fields");
       return;
     }
-
     try {
       setLoading(true);
       const formData = new FormData();
-      formData.append("image", image);
-      formData.append("prompt", prompt);
-      formData.append("categoryId", categoryId);
+      formData.append("image", image);           // server expects "image"
+      formData.append("prompt", prompt);         // server expects "prompt"
+      formData.append("categoryId", categoryId); // server expects "categoryId"
+      if (tags.trim()) formData.append("tags", tags.trim()); // optional: comma or JSON array string
 
-      const res = await fetch(`/api/create-work`, {
-        method: "POST",
-        body: formData,
-      });
-
+      const res = await fetch(`/api/create-work`, { method: "POST", body: formData });
       const data = await res.json();
       if (res.ok) {
         toast.success(data.message || "Work created successfully");
-        
-        // Reset form
         onResetForm();
-        
-        // Close modal
         setOpen(false);
-        
-        // Call parent callback to refresh the works list
-        if (onWorkCreated) {
-          onWorkCreated();
-        }
+        onWorkCreated?.();
       } else {
         toast.error(data.message || "Something went wrong");
       }
@@ -234,28 +234,19 @@ function WorkForm({
 
   return (
     <form onSubmit={handleSubmit} encType="multipart/form-data" className="h-full flex overflow-y-scroll flex-col">
-      {/* Scrollable Content Area with overflow-y-scroll */}
       <ModalContent className="flex-1 overflow-y-scroll px-6 py-4">
-        {/* Enhanced Header */}
         <div className="text-center mb-6">
           <h4 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
             Create Your Masterpiece
           </h4>
-          <p className="text-gray-600 dark:text-gray-400 text-sm">
-            Upload your image and add creative details
-          </p>
+          <p className="text-gray-600 dark:text-gray-400 text-sm">Upload your image and add creative details</p>
         </div>
 
-        {/* Image Preview Section */}
         {imagePreview && (
           <div className="mb-6 relative group">
             <div className="relative rounded-xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 shadow-md">
-              <img
-                src={imagePreview}
-                alt="Preview"
-                className="w-full h-48 object-cover"
-              />
-              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300 flex items-center justify-center">
+              <img src={imagePreview} alt="Preview" className="w-full h-48 object-cover" />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 flex items-center justify-center">
                 <button
                   type="button"
                   onClick={onRemoveImage}
@@ -271,7 +262,6 @@ function WorkForm({
           </div>
         )}
 
-        {/* Enhanced Image Upload */}
         <LabelInputContainer className="mb-4">
           <Label htmlFor="image" className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
             <Upload className="w-4 h-4" />
@@ -280,27 +270,34 @@ function WorkForm({
           <div
             className={cn(
               "relative border-2 border-dashed rounded-xl text-center transition-all duration-300 cursor-pointer group hover:border-blue-400",
-              dragActive 
-                ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20" 
+              dragActive
+                ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20"
                 : "border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50",
-              imagePreview 
-                ? "border-green-400 bg-green-50 dark:bg-green-950/20 p-4"
-                : "p-8"
+              imagePreview ? "border-green-400 bg-green-50 dark:bg-green-950/20 p-4" : "p-8"
             )}
             onDragEnter={onDrag}
             onDragLeave={onDrag}
             onDragOver={onDrag}
             onDrop={onDrop}
-            onClick={() => document.getElementById('image')?.click()}
+            onClick={() => {
+              // Pre-clear before opening picker to ensure same-file onChange fires
+              if (fileInputRef.current) fileInputRef.current.value = "";
+              fileInputRef.current?.click();
+            }}
           >
             <input
+              ref={fileInputRef}
               id="image"
               type="file"
               accept="image/*"
+              // Pre-clear right before dialog opens (some browsers route clicks directly to input)
+              onClick={(e) => {
+                const target = e.target as HTMLInputElement;
+                target.value = "";
+              }}
               onChange={onFileInputChange}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
-            
             {!imagePreview ? (
               <div className="space-y-3">
                 <div className="mx-auto w-10 h-10 text-gray-400 group-hover:text-blue-500 transition-colors">
@@ -314,27 +311,20 @@ function WorkForm({
                     or <span className="text-blue-600 font-medium">browse</span> to choose a file
                   </p>
                 </div>
-                <p className="text-xs text-gray-400">
-                  PNG, JPG, GIF up to 10MB
-                </p>
+                <p className="text-xs text-gray-400">PNG, JPG, GIF up to 10MB</p>
               </div>
             ) : (
               <div className="space-y-2">
                 <div className="mx-auto w-6 h-6 text-green-500">
                   <ImageIcon className="w-full h-full" />
                 </div>
-                <p className="text-sm font-medium text-green-600">
-                  Image uploaded successfully!
-                </p>
-                <p className="text-xs text-gray-500">
-                  Click to change image
-                </p>
+                <p className="text-sm font-medium text-green-600">Image uploaded successfully!</p>
+                <p className="text-xs text-gray-500">Click to change image</p>
               </div>
             )}
           </div>
         </LabelInputContainer>
 
-        {/* Enhanced Prompt Input */}
         <LabelInputContainer className="mb-4">
           <Label htmlFor="prompt" className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
             Creative Prompt
@@ -347,13 +337,12 @@ function WorkForm({
               onChange={(e) => onPromptChange(e.target.value)}
               className="pl-4 pr-10 py-2.5 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-sm"
             />
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
               <Sparkles className="w-4 h-4" />
             </div>
           </div>
         </LabelInputContainer>
 
-        {/* Enhanced Category Selection */}
         <LabelInputContainer className="mb-4">
           <Label htmlFor="category" className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
             Category
@@ -372,18 +361,31 @@ function WorkForm({
                 </option>
               ))}
             </select>
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
               <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </div>
           </div>
         </LabelInputContainer>
+
+        <LabelInputContainer className="mb-4">
+          <Label htmlFor="tags" className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+            <Tag className="w-4 h-4" />
+            Tags (optional)
+          </Label>
+          <Input
+            id="tags"
+            placeholder='e.g. "portrait, neon, cyberpunk" or ["portrait","neon"]'
+            value={tags}
+            onChange={(e) => onTagsChange(e.target.value)}
+            className="pl-4 py-2.5 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-sm"
+          />
+        </LabelInputContainer>
       </ModalContent>
 
-      {/* Fixed Footer - Always visible */}
       <ModalFooter className="gap-3 pt-4 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
-        <ModalCancelButton />
+        <ModalCancelButton onCancelReset={onResetForm} />
         <button
           type="submit"
           disabled={loading || !image || !prompt || !categoryId}
@@ -391,7 +393,7 @@ function WorkForm({
         >
           {loading ? (
             <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
               Creating...
             </>
           ) : (
@@ -406,15 +408,15 @@ function WorkForm({
   );
 }
 
-// Cancel button component that uses the modal context
-function ModalCancelButton() {
-  const { useModal } = require("./ui/animated-modal");
+function ModalCancelButton({ onCancelReset }: { onCancelReset?: () => void }) {
   const { setOpen } = useModal();
-  
   return (
     <button
       type="button"
-      onClick={() => setOpen(false)}
+      onClick={() => {
+        onCancelReset?.();
+        setOpen(false);
+      }}
       className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium transition-all duration-200 hover:scale-105"
     >
       Cancel
@@ -428,10 +430,4 @@ const LabelInputContainer = ({
 }: {
   children: React.ReactNode;
   className?: string;
-}) => {
-  return (
-    <div className={cn("flex w-full flex-col space-y-1", className)}>
-      {children}
-    </div>
-  );
-};
+}) => <div className={cn("flex w-full flex-col space-y-1", className)}>{children}</div>;

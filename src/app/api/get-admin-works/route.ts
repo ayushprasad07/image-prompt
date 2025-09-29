@@ -46,7 +46,7 @@ export async function GET(req: Request) {
       .skip(skip)
       .limit(limit)
       .lean()
-      .select("_id prompt imageUrl categoryId createdAt");
+      .select("_id prompt imageUrl categoryId tags createdAt");
 
     const responseData = JSON.stringify({
       success: true,
