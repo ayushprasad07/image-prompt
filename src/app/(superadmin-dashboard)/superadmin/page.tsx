@@ -8,6 +8,7 @@ import axios from 'axios';
 import { Loader, Users, FileImage, RefreshCw, Trash2, Tag, Plus, AlertTriangle, Search } from 'lucide-react';
 import SettingsDialog from '@/components/SettingDialog';
 import CreateNotificationDialog from '@/components/CreateNotificationDialog';
+import GivePolicy from '@/components/GivePolicy';
 
 interface AdminStats {
   total: number;
@@ -305,6 +306,7 @@ const Superadmin = () => {
         <div className='flex items-center gap-3'>
           <SettingsDialog/>
           <CreateNotificationDialog/>
+          <GivePolicy/>
           <button
             onClick={() => {
               fetchDashboardStats();
