@@ -9,6 +9,14 @@ import { toast } from "sonner";
 import { Copy, Loader, RefreshCw, CheckCircle, ArrowLeft, Trash2, Shield, Menu, X } from "lucide-react";
 import UpdateDialog from "@/components/UpdateDialog";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 interface Category {
   _id: string;
@@ -21,7 +29,7 @@ interface Work {
   imageUrl: string;
   categoryId: Category | string;
   createdAt: string;
-  tags?: string[]; // <-- show tags
+  tags?: string[];
   isOptimistic?: boolean;
   originalData?: Partial<Work>;
 }
@@ -47,6 +55,285 @@ const WorkSkeleton = () => (
     </div>
   </div>
 );
+
+// WorkDetailDialog component for displaying full work details
+const WorkDetailDialog = ({ work, categories, copiedId, onCopy, onDelete, onUpdate, isSuperAdmin, recentlyUpdated }: {
+  work: Work;
+  categories: Record<string, string>;
+  copiedId: string | null;
+  onCopy: (text: string, workId: string) => void;
+  onDelete: (workId: string) => void;
+  onUpdate: (workId: string, updatedData: Partial<Work>) => void;
+  isSuperAdmin: boolean;
+  recentlyUpdated: boolean;
+}) => {
+  const getCategoryName = (categoryId: Category | string): string => {
+    if (typeof categoryId === 'object' && categoryId?.name) return categoryId.name;
+    if (typeof categoryId === 'string') return categories[categoryId] ?? "Unknown";
+    return "Uncategorized";
+  };
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <div className="cursor-pointer">
+          <div
+            className={cn(
+              "group bg-white rounded-xl sm:rounded-2xl lg:rounded-3xl p-3 sm:p-4 lg:p-6 shadow-sm border transition-all duration-500 hover:-translate-y-1 sm:hover:-translate-y-2 relative",
+              work.isOptimistic && "border-blue-400 shadow-blue-200/50",
+              recentlyUpdated && "border-green-400 shadow-green-200/50 shadow-lg",
+              isSuperAdmin && "ring-1 ring-purple-100",
+              "border-gray-100 hover:shadow-xl hover:border-gray-200"
+            )}
+          >
+            {isSuperAdmin && (
+              <div className="absolute top-1 left-1 sm:top-2 sm:left-2 z-10">
+                <div className="bg-purple-500 text-white p-1 rounded-full shadow-sm">
+                  <Shield className="w-2 h-2 sm:w-3 sm:h-3" />
+                </div>
+              </div>
+            )}
+
+            {work.isOptimistic && (
+              <div className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2 z-10">
+                <div className="bg-blue-500 text-white p-1 rounded-full shadow-lg">
+                  <Loader className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
+                </div>
+              </div>
+            )}
+
+            {recentlyUpdated && !work.isOptimistic && (
+              <div className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2 z-10">
+                <div className="bg-green-500 text-white p-1 rounded-full shadow-lg animate-bounce">
+                  <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4" />
+                </div>
+              </div>
+            )}
+
+            <div className="relative overflow-hidden rounded-lg sm:rounded-xl lg:rounded-2xl mb-3 sm:mb-4 lg:mb-6 bg-gradient-to-br from-gray-50 to-gray-100">
+              <Image
+                src={work.imageUrl}
+                alt={work.prompt}
+                width={400}
+                height={300}
+                className="w-full h-32 xs:h-36 sm:h-40 lg:h-56 object-cover transition-transform duration-700 group-hover:scale-110"
+                sizes="(max-width: 475px) 100vw, (max-width: 640px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
+              />
+              <div className="absolute top-2 sm:top-3 lg:top-4 left-2 sm:left-3 lg:left-4">
+                <span className="inline-flex items-center px-2 sm:px-3 py-1 sm:py-1.5 bg-white/95 backdrop-blur-sm rounded-full text-xs font-semibold text-gray-700 shadow-sm border border-gray-100 max-w-[120px] sm:max-w-none truncate">
+                  {getCategoryName(work.categoryId)}
+                </span>
+              </div>
+              
+              {/* Copy button on card - restored */}
+              <div className="absolute top-2 sm:top-3 lg:top-4 right-2 sm:right-3 lg:right-4 z-10">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCopy(work.prompt, work._id);
+                  }}
+                  className={cn(
+                    "p-1.5 sm:p-2 backdrop-blur-sm rounded-full shadow-sm border transition-all duration-200 hover:scale-105",
+                    copiedId === work._id
+                      ? "bg-green-100 border-green-200 text-green-600"
+                      : "bg-white/95 border-gray-100 hover:bg-white text-gray-600"
+                  )}
+                  title="Copy prompt to clipboard"
+                >
+                  {copiedId === work._id ? (
+                    <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
+                  ) : (
+                    <Copy className="w-3 h-3 sm:w-4 sm:h-4" />
+                  )}
+                </button>
+              </div>
+              
+              <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            </div>
+
+            <div className="space-y-2 sm:space-y-3 lg:space-y-4">
+              <h3 className="text-lg font-bold text-gray-900 leading-7 group-hover:text-blue-600 transition-colors duration-300 break-words hyphens-auto line-clamp-2">
+                {work.prompt.length > 100 ? `${work.prompt.substring(0, 100)}...` : work.prompt}
+              </h3>
+
+              {Array.isArray(work.tags) && work.tags.filter(t => t && t.trim().length > 0).length > 0 && (
+                <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                  {work.tags
+                    .filter((t) => t && t.trim().length > 0)
+                    .slice(0, 3)
+                    .map((tag, i) => (
+                      <span
+                        key={`${work._id}-tag-${i}-${tag}`}
+                        className="inline-flex items-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100"
+                        title={tag}
+                      >
+                        #{tag}
+                      </span>
+                    ))}
+                  {work.tags.filter(t => t && t.trim().length > 0).length > 3 && (
+                    <span className="inline-flex items-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-gray-100 text-gray-600">
+                      +{work.tags.filter(t => t && t.trim().length > 0).length - 3}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between gap-1 xs:gap-2">
+                <p className="text-xs sm:text-sm text-gray-500 font-medium">
+                  <span className="hidden sm:inline">Created </span>
+                  {new Date(work.createdAt).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "2-digit",
+                  })}
+                </p>
+                {work.isOptimistic && (
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
+                    {isSuperAdmin ? "SuperAdmin Updating..." : "Updating..."}
+                  </span>
+                )}
+                {recentlyUpdated && !work.isOptimistic && (
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
+                    {isSuperAdmin ? "SuperAdmin Updated!" : "Updated!"}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div
+              className={cn(
+                "absolute top-0 right-0 w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 bg-gradient-to-br to-transparent rounded-br-xl sm:rounded-br-2xl lg:rounded-br-3xl pointer-events-none",
+                isSuperAdmin ? "from-purple-500/5" : "from-blue-500/5"
+              )}
+            />
+          </div>
+        </div>
+      </DialogTrigger>
+      
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-2xl font-bold text-gray-900 pr-8">
+            Work Details
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Full details of the selected work
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-6 py-4">
+          {/* Image */}
+          <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-gray-50 to-gray-100">
+            <Image
+              src={work.imageUrl}
+              alt={work.prompt}
+              width={800}
+              height={600}
+              className="w-full h-auto object-cover"
+              priority
+            />
+            <div className="absolute top-4 left-4">
+              <span className="inline-flex items-center px-3 py-1.5 bg-white/95 backdrop-blur-sm rounded-full text-sm font-semibold text-gray-700 shadow-sm border border-gray-100">
+                {getCategoryName(work.categoryId)}
+              </span>
+            </div>
+          </div>
+
+          {/* Full Prompt */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Prompt</h4>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCopy(work.prompt, work._id);
+                }}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200",
+                  copiedId === work._id
+                    ? "bg-green-100 border-green-200 text-green-600"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+                )}
+              >
+                {copiedId === work._id ? (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    Copy
+                  </>
+                )}
+              </button>
+            </div>
+            <p className="text-base text-gray-900 leading-relaxed bg-gray-50 p-4 rounded-lg border border-gray-200">
+              {work.prompt}
+            </p>
+          </div>
+
+          {/* Tags */}
+          {Array.isArray(work.tags) && work.tags.filter(t => t && t.trim().length > 0).length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Tags</h4>
+              <div className="flex flex-wrap gap-2">
+                {work.tags
+                  .filter((t) => t && t.trim().length > 0)
+                  .map((tag, i) => (
+                    <span
+                      key={`${work._id}-detail-tag-${i}-${tag}`}
+                      className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-blue-50 text-blue-700 border border-blue-100"
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Metadata */}
+          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
+            <div>
+              <p className="text-sm font-semibold text-gray-500 mb-1">Created</p>
+              <p className="text-base text-gray-900">
+                {new Date(work.createdAt).toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </p>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-4 border-t border-gray-200">
+            <div className="flex-1">
+              <UpdateDialog 
+                id={work._id.toString()} 
+                onUpdateSuccess={onUpdate}
+                onOptimisticSuccess={() => {}}
+                onOptimisticError={() => {}}
+              />
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirm('Are you sure you want to delete this work?')) {
+                  onDelete(work._id);
+                }
+              }}
+              className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 rounded-xl transition-all duration-200 hover:scale-105 flex items-center gap-2 border border-red-100 hover:border-red-200"
+              title={isSuperAdmin ? "Delete work (SuperAdmin)" : "Delete work"}
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Delete</span>
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 const AdminWorksPage = () => {
   const { id } = useParams();
@@ -89,7 +376,7 @@ const AdminWorksPage = () => {
 
   const getCategoryName = (categoryId: Category | string): string => {
     if (typeof categoryId === 'object' && categoryId?.name) return categoryId.name;
-    if (typeof categoryId === 'string') return categoriesRef.current[categoryId] || "Loading...";
+    if (typeof categoryId === 'string') return categories[categoryId] ?? "Unknown";
     return "Uncategorized";
   };
 
@@ -398,22 +685,10 @@ const AdminWorksPage = () => {
                         SuperAdmin
                       </span>
                     </div>
-                    {isPolling && (
-                      <div className="flex items-center gap-1 text-xs bg-green-50 text-green-600 px-2 py-1 rounded-full">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                        <span className="hidden xs:inline">Live Updates</span>
-                        <span className="xs:hidden">Live</span>
-                      </div>
-                    )}
+                    
                   </div>
                 )}
               </div>
-              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1 sm:mt-2">
-                <span className="font-semibold">{totalWorks}</span> work{totalWorks !== 1 ? 's' : ''} found
-                {isSuperAdmin && isPolling && (
-                  <span className="text-green-600 ml-2 hidden sm:inline">• Live monitoring active</span>
-                )}
-              </p>
             </div>
           </div>
 
@@ -489,144 +764,17 @@ const AdminWorksPage = () => {
             <>
               <div className="w-full grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6 xl:gap-8">
                 {works.map((work, index) => (
-                  <div
+                  <WorkDetailDialog
                     key={work._id}
-                    className={cn(
-                      "group bg-white rounded-xl sm:rounded-2xl lg:rounded-3xl p-3 sm:p-4 lg:p-6 shadow-sm border transition-all duration-500 hover:-translate-y-1 sm:hover:-translate-y-2 relative",
-                      work.isOptimistic && "border-blue-400 shadow-blue-200/50",
-                      recentlyUpdated.has(work._id) && "border-green-400 shadow-green-200/50 shadow-lg",
-                      isSuperAdmin && "ring-1 ring-purple-100",
-                      "border-gray-100 hover:shadow-xl hover:border-gray-200"
-                    )}
-                    style={{ animationDelay: `${index * 50}ms` }}
-                  >
-                    {isSuperAdmin && (
-                      <div className="absolute top-1 left-1 sm:top-2 sm:left-2 z-10">
-                        <div className="bg-purple-500 text-white p-1 rounded-full shadow-sm">
-                          <Shield className="w-2 h-2 sm:w-3 sm:h-3" />
-                        </div>
-                      </div>
-                    )}
-
-                    {work.isOptimistic && (
-                      <div className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2 z-10">
-                        <div className="bg-blue-500 text-white p-1 rounded-full shadow-lg">
-                          <Loader className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
-                        </div>
-                      </div>
-                    )}
-
-                    {recentlyUpdated.has(work._id) && !work.isOptimistic && (
-                      <div className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2 z-10">
-                        <div className="bg-green-500 text-white p-1 rounded-full shadow-lg animate-bounce">
-                          <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4" />
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="relative overflow-hidden rounded-lg sm:rounded-xl lg:rounded-2xl mb-3 sm:mb-4 lg:mb-6 bg-gradient-to-br from-gray-50 to-gray-100">
-                      <Image
-                        src={work.imageUrl}
-                        alt={work.prompt}
-                        width={400}
-                        height={300}
-                        className="w-full h-32 xs:h-36 sm:h-40 lg:h-56 object-cover transition-transform duration-700 group-hover:scale-110"
-                        sizes="(max-width: 475px) 100vw, (max-width: 640px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
-                      />
-                      <div className="absolute top-2 sm:top-3 lg:top-4 left-2 sm:left-3 lg:left-4">
-                        <span className="inline-flex items-center px-2 sm:px-3 py-1 sm:py-1.5 bg-white/95 backdrop-blur-sm rounded-full text-xs font-semibold text-gray-700 shadow-sm border border-gray-100 max-w-[120px] sm:max-w-none truncate">
-                          {getCategoryName(work.categoryId)}
-                        </span>
-                      </div>
-                      <div className="absolute top-2 sm:top-3 lg:top-4 right-2 sm:right-3 lg:right-4 z-10">
-                        <button
-                          onClick={() => copyToClipboard(work.prompt, work._id)}
-                          className={cn(
-                            "p-1.5 sm:p-2 backdrop-blur-sm rounded-full shadow-sm border transition-all duration-200 hover:scale-105",
-                            copiedId === work._id
-                              ? "bg-green-100 border-green-200 text-green-600"
-                              : "bg-white/95 border-gray-100 hover:bg-white text-gray-600"
-                          )}
-                          title="Copy prompt to clipboard"
-                        >
-                          {copiedId === work._id ? (
-                            <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
-                          ) : (
-                            <Copy className="w-3 h-3 sm:w-4 sm:h-4" />
-                          )}
-                        </button>
-                      </div>
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                    </div>
-
-                    <div className="space-y-2 sm:space-y-3 lg:space-y-4">
-                      <h3 className="text-lg font-bold text-gray-900 leading-7 group-hover:text-blue-600 transition-colors duration-300 break-words hyphens-auto">
-                        {work.prompt}
-                      </h3>
-
-                      {/* New: Tags row */}
-                      {Array.isArray(work.tags) && work.tags.filter(t => t && t.trim().length > 0).length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                          {work.tags
-                            .filter((t) => t && t.trim().length > 0)
-                            .slice(0, 10) // cap for this grid; adjust as needed
-                            .map((tag, i) => (
-                              <span
-                                key={`${work._id}-tag-${i}-${tag}`}
-                                className="inline-flex items-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100"
-                                title={tag}
-                              >
-                                #{tag}
-                              </span>
-                            ))}
-                        </div>
-                      )}
-
-                      <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between gap-1 xs:gap-2">
-                        <p className="text-xs sm:text-sm text-gray-500 font-medium">
-                          <span className="hidden sm:inline">Created </span>
-                          {new Date(work.createdAt).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "2-digit",
-                          })}
-                        </p>
-                        {work.isOptimistic && (
-                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
-                            {isSuperAdmin ? "SuperAdmin Updating..." : "Updating..."}
-                          </span>
-                        )}
-                        {recentlyUpdated.has(work._id) && !work.isOptimistic && (
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
-                            {isSuperAdmin ? "SuperAdmin Updated!" : "Updated!"}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex gap-2 sm:gap-3 pt-1 sm:pt-2">
-                        <UpdateDialog 
-                          id={work._id.toString()} 
-                          onUpdateSuccess={handleWorkUpdated}
-                          onOptimisticSuccess={handleOptimisticSuccess}
-                          onOptimisticError={handleOptimisticError}
-                        />
-                        <button
-                          onClick={() => handleDeleteWork(work._id)}
-                          className="p-2 sm:p-2.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 rounded-lg sm:rounded-xl transition-all duration-200 hover:scale-105 flex items-center justify-center border border-red-100 hover:border-red-200"
-                          title={isSuperAdmin ? "Delete work (SuperAdmin)" : "Delete work"}
-                        >
-                          <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div
-                      className={cn(
-                        "absolute top-0 right-0 w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 bg-gradient-to-br to-transparent rounded-br-xl sm:rounded-br-2xl lg:rounded-br-3xl pointer-events-none",
-                        isSuperAdmin ? "from-purple-500/5" : "from-blue-500/5"
-                      )}
-                    />
-                  </div>
+                    work={work}
+                    categories={categories}
+                    copiedId={copiedId}
+                    onCopy={copyToClipboard}
+                    onDelete={handleDeleteWork}
+                    onUpdate={handleWorkUpdated}
+                    isSuperAdmin={isSuperAdmin}
+                    recentlyUpdated={recentlyUpdated.has(work._id)}
+                  />
                 ))}
               </div>
 

@@ -5,6 +5,7 @@ import { authOptions } from "../../auth/[...nextauth]/options";
 import Work from "@/model/Work";
 import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
+import "@/model/Category";
 
 // /api/get-work-by-admin/[adminid]?page=2
 export async function GET(
@@ -43,8 +44,8 @@ export async function GET(
       Work.find({ adminId })
         .sort({ createdAt: -1 }) // latest first
         .skip(skip)
-        .limit(limit),
-        // .populate("categoryId", "name"),
+        .limit(limit)
+        .populate("categoryId", "name"),
       Work.countDocuments({ adminId }),
     ]);
 

@@ -11,7 +11,8 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { Crown, Loader, User, Shield, CheckCircle, AlertCircle } from 'lucide-react';
+import { Crown, Loader, User, Shield, AlertCircle, Trash2 } from 'lucide-react';
+
 
 const Admins = () => {
   const [admins, setAdmins] = useState<any[]>([]);
@@ -19,7 +20,8 @@ const Admins = () => {
   const [limit] = useState(10); // page size
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [upgradingAdmin, setUpgradingAdmin] = useState<string | null>(null);
+  const [deletingAdmin, setDeletingAdmin] = useState<string | null>(null);
+
 
   const fetchAdmins = async (pageNum: number) => {
     setLoading(true);
@@ -27,7 +29,6 @@ const Admins = () => {
       const response = await axios.get(`/api/get-all-admins?limit=${limit}&page=${pageNum}`);
       const { data, pagination, message } = response.data;
 
-      // Debug log to check the data structure
       console.log('Fetched admins:', data);
       console.log('Admin roles:', data.map((admin: any) => ({ id: admin._id, role: admin.role })));
 
@@ -49,59 +50,67 @@ const Admins = () => {
     }
   };
 
-  const markAsSuperadmin = async (adminId: string, adminName: string) => {
-    setUpgradingAdmin(adminId);
+
+  const deleteAdmin = async (adminId: string, adminName: string) => {
+    // Confirmation dialog
+    const confirmed = window.confirm(
+      `Are you sure you want to delete admin "${adminName}"?\n\nThis will also delete all works created by this admin. This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    // Optimistic update
+    const originalAdmins = admins;
+    setAdmins(prevAdmins => prevAdmins.filter(admin => admin._id !== adminId));
+    setDeletingAdmin(adminId);
+
     try {
-      const response = await axios.patch(`/api/mark-as-superadmin/${adminId}`);
+      const response = await axios.delete(`/api/delete-admin/${adminId}`);
       
       if (response.data.success) {
-        toast.success(response.data.message);
+        toast.success(response.data.message || "Admin deleted successfully");
         
-        // Debug log to check the response
-        console.log('Mark as superadmin response:', response.data);
-        
-        // Update the local state to reflect the change
-        setAdmins(prevAdmins => {
-          const updatedAdmins = prevAdmins.map(admin =>
-            admin._id === adminId
-              ? { ...admin, role: 'superadmin' }
-              : admin
-          );
-          
-          // Debug log to check updated state
-          console.log('Updated admins after role change:', updatedAdmins);
-          console.log('Updated admin roles:', updatedAdmins.map(admin => ({ id: admin._id, role: admin.role })));
-          
-          return updatedAdmins;
-        });
+        // If we deleted the last admin on this page and it's not page 1, go to previous page
+        if (admins.length === 1 && page > 1) {
+          setPage(page - 1);
+        } else {
+          // Refresh the current page to get updated data
+          fetchAdmins(page);
+        }
       }
     } catch (error: any) {
-      console.error("Error upgrading admin:", error);
+      console.error("Error deleting admin:", error);
+      
+      // Revert optimistic update on error
+      setAdmins(originalAdmins);
       
       if (axios.isAxiosError(error) && error.response) {
-        toast.error(error.response.data.message || "Failed to upgrade admin");
+        toast.error(error.response.data.message || "Failed to delete admin");
       } else {
-        toast.error("Failed to upgrade admin");
+        toast.error("Failed to delete admin");
       }
     } finally {
-      setUpgradingAdmin(null);
+      setDeletingAdmin(null);
     }
   };
+
 
   useEffect(() => {
     fetchAdmins(page);
   }, [page]);
 
-  // Enhanced role checking with debugging
+
+  // Enhanced role checking
   const normalizeRole = (role: string) => {
     return role?.toLowerCase().trim() || 'admin';
   };
 
+
   const isSuperAdmin = (role: string) => {
     const normalized = normalizeRole(role);
-    console.log('Checking role:', role, 'normalized:', normalized, 'is superadmin:', normalized === 'superadmin');
     return normalized === 'superadmin';
   };
+
 
   const getRoleBadge = (role: string) => {
     if (isSuperAdmin(role)) {
@@ -120,12 +129,14 @@ const Admins = () => {
     );
   };
 
+
   const getAvatarColor = (role: string) => {
     if (isSuperAdmin(role)) {
       return 'bg-gradient-to-br from-yellow-500 to-orange-600';
     }
     return 'bg-gradient-to-br from-blue-500 to-purple-600';
   };
+
 
   return (
     <div className='py-10 pb-20 md:p-20 w-full'>
@@ -148,12 +159,6 @@ const Admins = () => {
               </p>
               <p className="text-sm text-gray-600">Regular Admins</p>
             </div>
-            <div className="bg-white/90 backdrop-blur-lg border border-gray-200 rounded-xl p-4 text-center shadow-lg">
-              <p className="text-2xl font-bold text-yellow-600">
-                {admins.filter(admin => isSuperAdmin(admin.role)).length}
-              </p>
-              <p className="text-sm text-gray-600">Super Admins</p>
-            </div>
           </div>
         </div>
       </div>
@@ -171,7 +176,6 @@ const Admins = () => {
         ) : admins.length > 0 ? (
           <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6'>
             {admins.map((admin, index) => {
-              // Debug log for each admin
               console.log(`Rendering admin ${admin.username}:`, {
                 id: admin._id,
                 role: admin.role,
@@ -219,29 +223,32 @@ const Admins = () => {
                         </Link>
                       )}
 
-                      {/* Mark as Superadmin Button */}
-                      {!isSuperAdmin(admin.role) ? (
+                      {/* Delete Admin Button - Only show for regular admins */}
+                      {!isSuperAdmin(admin.role) && (
                         <button
-                          onClick={() => markAsSuperadmin(admin._id, admin.username)}
-                          disabled={upgradingAdmin === admin._id}
-                          className="w-full bg-gradient-to-r from-yellow-100 to-orange-100 hover:from-yellow-200 hover:to-orange-200 text-yellow-700 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          onClick={() => deleteAdmin(admin._id, admin.username)}
+                          disabled={deletingAdmin === admin._id}
+                          className="w-full bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
-                          {upgradingAdmin === admin._id ? (
+                          {deletingAdmin === admin._id ? (
                             <>
                               <Loader className="w-4 h-4 animate-spin" />
-                              Upgrading...
+                              Deleting...
                             </>
                           ) : (
                             <>
-                              <Crown className="w-4 h-4" />
-                              Mark as Super Admin
+                              <Trash2 className="w-4 h-4" />
+                              Delete Admin
                             </>
                           )}
                         </button>
-                      ) : (
-                        <div className="w-full bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center gap-2 cursor-not-allowed">
-                          <CheckCircle className="w-4 h-4" />
-                          Already Super Admin
+                      )}
+
+                      {/* SuperAdmin Info - Show for superadmins */}
+                      {isSuperAdmin(admin.role) && (
+                        <div className="w-full bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-700 px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center gap-2">
+                          <Crown className="w-4 h-4" />
+                          Protected Account
                         </div>
                       )}
                     </div>
@@ -278,6 +285,9 @@ const Admins = () => {
                     e.preventDefault();
                     if (page > 1) setPage(page - 1);
                   }}
+                  aria-disabled={page <= 1}
+                  tabIndex={page <= 1 ? -1 : undefined}
+                  className={page === 1 ? 'pointer-events-none opacity-50' : ''}
                 />
               </PaginationItem>
 
@@ -316,6 +326,9 @@ const Admins = () => {
                     e.preventDefault();
                     if (page < totalPages) setPage(page + 1);
                   }}
+                  aria-disabled={page >= totalPages}
+                  tabIndex={page >= totalPages ? -1 : undefined}
+                  className={page === totalPages ? 'pointer-events-none opacity-50' : ''}
                 />
               </PaginationItem>
             </PaginationContent>
