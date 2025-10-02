@@ -418,21 +418,6 @@ const AdminWorksPage = () => {
           </div>
 
           <div className="hidden sm:flex items-center gap-2 lg:gap-3">
-            {isSuperAdmin && (
-              <button
-                onClick={togglePolling}
-                className={cn(
-                  "flex items-center gap-2 px-3 lg:px-4 py-2 backdrop-blur-sm border rounded-xl transition-all duration-300 text-sm lg:text-base",
-                  isPolling 
-                    ? "bg-green-50 border-green-200 text-green-700 hover:bg-green-100" 
-                    : "bg-white/80 border-white/20 text-gray-700 hover:bg-white hover:shadow-lg"
-                )}
-              >
-                <div className={cn("w-2 h-2 rounded-full", isPolling ? "bg-green-500 animate-pulse" : "bg-gray-400")} />
-                <span className="hidden md:inline">{isPolling ? 'Stop Live Updates' : 'Start Live Updates'}</span>
-                <span className="md:hidden">{isPolling ? 'Stop' : 'Start'}</span>
-              </button>
-            )}
             <button
               onClick={() => fetchWorks(page, true)}
               disabled={loading}

@@ -11,21 +11,33 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   const superAdmin: User = session?.user as User;
 
+  // ✅ Check if user is superadmin
   if (!superAdmin || superAdmin.role !== "superadmin") {
-    return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    return Response.json(
+      { success: false, message: "Unauthorized" },
+      { status: 401 }
+    );
   }
 
   try {
-    const { url } = await req.json();
+    const { url, termsAdnConditions } = await req.json();
 
-    // if (!url) {
-    //   return Response.json({ success: false, message: "URL is required" }, { status: 400 });
-    // }
+    // ✅ Validate fields (optional)
+    if (!url && !termsAdnConditions) {
+      return Response.json(
+        { success: false, message: "At least one field is required" },
+        { status: 400 }
+      );
+    }
 
-    // Update if exists, else create new
-    const privacy = await Privacy.findOneAndUpdate({}, { url }, { new: true, upsert: true });
+    // ✅ Update existing or create new document
+    const privacy = await Privacy.findOneAndUpdate(
+      {},
+      { url, termsAdnConditions },
+      { new: true, upsert: true }
+    );
 
-    // Clear Redis cache if you use it
+    // ✅ Clear Redis cache
     await redis.del("privacy_policy");
 
     return Response.json({
@@ -35,6 +47,9 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     console.error("Privacy policy update error:", error);
-    return Response.json({ success: false, message: "Something went wrong" }, { status: 500 });
+    return Response.json(
+      { success: false, message: "Something went wrong" },
+      { status: 500 }
+    );
   }
 }

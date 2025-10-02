@@ -3,7 +3,7 @@ import Work from "@/model/Work";
 import redis from "@/lib/redis";
 import "@/model/Category";
 
-const RATE_LIMIT = 150;
+const RATE_LIMIT = 200;
 const WINDOW_SECONDS = 60;
 
 async function rateLimit(ip: string): Promise<boolean> {

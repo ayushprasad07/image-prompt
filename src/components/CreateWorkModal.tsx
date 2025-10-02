@@ -28,8 +28,11 @@ export function CreateWorkModal({ onWorkCreated }: CreateWorkModalProps) {
   const [loading, setLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
 
-  // Nullable element ref (React refs are nullable by design)
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Guard against accidental duplicate handling
+  const lastFileSigRef = useRef<string | null>(null);
+  const fileSignature = (f: File) => `${f.name}:${f.size}:${f.type}:${f.lastModified}`;
 
   useEffect(() => {
     let mounted = true;
@@ -54,31 +57,28 @@ export function CreateWorkModal({ onWorkCreated }: CreateWorkModalProps) {
     };
   }, []);
 
-  // Post-change reset so subsequent same-file picks trigger onChange
-  const resetFileInputValue = () => {
-    if (fileInputRef.current) {
-      setTimeout(() => {
-        if (fileInputRef.current) fileInputRef.current.value = "";
-      }, 0);
-    }
-  };
-
   const handleImageChange = (file: File) => {
-    if (file && file.type.startsWith("image/")) {
-      setImage(file);
-      const reader = new FileReader();
-      reader.onload = (e) => setImagePreview((e.target?.result as string) || "");
-      reader.readAsDataURL(file);
-    } else {
+    if (!file || !file.type.startsWith("image/")) {
       toast.error("Please select a valid image file");
+      return;
     }
-    // Post-clear keeps future same-file selections working
-    resetFileInputValue();
+    const sig = fileSignature(file);
+    if (sig === lastFileSigRef.current) {
+      return;
+    }
+    lastFileSigRef.current = sig;
+
+    setImage(file);
+    const reader = new FileReader();
+    reader.onload = (e) => setImagePreview((e.target?.result as string) || "");
+    reader.readAsDataURL(file);
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     if (file) handleImageChange(file);
+    // Clear once so selecting the same file again fires change
+    e.target.value = "";
   };
 
   const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
@@ -99,7 +99,8 @@ export function CreateWorkModal({ onWorkCreated }: CreateWorkModalProps) {
   const removeImage = () => {
     setImage(null);
     setImagePreview("");
-    resetFileInputValue();
+    lastFileSigRef.current = null;
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const resetForm = () => {
@@ -108,7 +109,8 @@ export function CreateWorkModal({ onWorkCreated }: CreateWorkModalProps) {
     setPrompt("");
     setCategoryId("");
     setTags("");
-    resetFileInputValue();
+    lastFileSigRef.current = null;
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   return (
@@ -134,7 +136,6 @@ export function CreateWorkModal({ onWorkCreated }: CreateWorkModalProps) {
             categories={categories}
             loading={loading}
             dragActive={dragActive}
-            onImageChange={handleImageChange}
             onFileInputChange={handleFileInputChange}
             onDrag={handleDrag}
             onDrop={handleDrop}
@@ -162,7 +163,6 @@ interface WorkFormProps {
   categories: { _id: string; name: string }[];
   loading: boolean;
   dragActive: boolean;
-  onImageChange: (file: File) => void;
   onFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDrag: (e: React.DragEvent<HTMLDivElement>) => void;
   onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
@@ -173,7 +173,6 @@ interface WorkFormProps {
   onWorkCreated?: () => void;
   onResetForm: () => void;
   setLoading: (loading: boolean) => void;
-  // Note the nullable element type to avoid TS errors
   fileInputRef: React.RefObject<HTMLInputElement | null>;
 }
 
@@ -209,10 +208,10 @@ function WorkForm({
     try {
       setLoading(true);
       const formData = new FormData();
-      formData.append("image", image);           // server expects "image"
-      formData.append("prompt", prompt);         // server expects "prompt"
-      formData.append("categoryId", categoryId); // server expects "categoryId"
-      if (tags.trim()) formData.append("tags", tags.trim()); // optional: comma or JSON array string
+      formData.append("image", image);
+      formData.append("prompt", prompt);
+      formData.append("categoryId", categoryId);
+      if (tags.trim()) formData.append("tags", tags.trim());
 
       const res = await fetch(`/api/create-work`, { method: "POST", body: formData });
       const data = await res.json();
@@ -267,6 +266,7 @@ function WorkForm({
             <Upload className="w-4 h-4" />
             Upload Image
           </Label>
+
           <div
             className={cn(
               "relative border-2 border-dashed rounded-xl text-center transition-all duration-300 cursor-pointer group hover:border-blue-400",
@@ -279,27 +279,20 @@ function WorkForm({
             onDragLeave={onDrag}
             onDragOver={onDrag}
             onDrop={onDrop}
-            onClick={() => {
-              // Pre-clear before opening picker to ensure same-file onChange fires
-              if (fileInputRef.current) fileInputRef.current.value = "";
-              fileInputRef.current?.click();
-            }}
           >
+            {/* Use label-for to trigger the picker natively and reliably */}
+            <label htmlFor="image" className="absolute inset-0 w-full h-full cursor-pointer" />
             <input
               ref={fileInputRef}
               id="image"
               type="file"
               accept="image/*"
-              // Pre-clear right before dialog opens (some browsers route clicks directly to input)
-              onClick={(e) => {
-                const target = e.target as HTMLInputElement;
-                target.value = "";
-              }}
               onChange={onFileInputChange}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              className="sr-only"
             />
+
             {!imagePreview ? (
-              <div className="space-y-3">
+              <div className="space-y-3 pointer-events-none">
                 <div className="mx-auto w-10 h-10 text-gray-400 group-hover:text-blue-500 transition-colors">
                   <Upload className="w-full h-full" />
                 </div>
@@ -314,7 +307,7 @@ function WorkForm({
                 <p className="text-xs text-gray-400">PNG, JPG, GIF up to 10MB</p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 pointer-events-none">
                 <div className="mx-auto w-6 h-6 text-green-500">
                   <ImageIcon className="w-full h-full" />
                 </div>

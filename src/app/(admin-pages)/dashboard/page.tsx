@@ -17,6 +17,7 @@ import UpdateDialog from '@/components/UpdateDialog'
 import { Button } from '@/components/ui/button'
 import { signOut } from 'next-auth/react'
 import { cn } from '@/lib/utils'
+import { useRouter } from "next/navigation";
 
 interface Work {
   _id: string
@@ -55,6 +56,7 @@ const AdminWorks = () => {
   const [isDeleting, setIsDeleting] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [recentlyUpdated, setRecentlyUpdated] = useState<Set<string>>(new Set())
+  const router = useRouter();
 
   const totalPages = Math.ceil(count / limit) || 1
 
@@ -241,7 +243,7 @@ const AdminWorks = () => {
           <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
           <span className="hidden sm:inline">Refresh</span>
         </button>
-        <CreateWorkModal onWorkCreated={handleWorkCreated} />
+        <CreateWorkModal onWorkCreated={() => router.refresh()} />
         <Button onClick={handleLogout} className='px-4 py-2 rounded-md text-white cursor-pointer dark:text-white text-center relative overflow-hidden'>
           Logout
         </Button>

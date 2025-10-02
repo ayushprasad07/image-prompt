@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Shield, Save, RotateCcw, Link2, Loader2, Lock /* or ShieldCheck */ } from "lucide-react";
+import { Shield, Save, RotateCcw, Link2, Loader2, Lock } from "lucide-react";
 
 type Role = "admin" | "superadmin" | string;
 interface SessionUser {
@@ -27,6 +27,7 @@ interface SessionUser {
 interface PrivacyDto {
   _id?: string;
   url: string;
+  termsAdnConditions: string;
   createdAt?: string;
 }
 
@@ -44,10 +45,18 @@ const GivePolicy: React.FC<GivePolicyProps> = ({ triggerClassName, defaultOpen =
   const [loading, setLoading] = useState<boolean>(false);
   const [fetching, setFetching] = useState<boolean>(false);
 
-  const [url, setUrl] = useState<string>("");
-  const [originalUrl, setOriginalUrl] = useState<string>("");
+  const [policyUrl, setPolicyUrl] = useState<string>("");
+  const [termsUrl, setTermsUrl] = useState<string>("");
 
-  const hasChanges = useMemo(() => url.trim() !== originalUrl.trim(), [url, originalUrl]);
+  const [originalPolicyUrl, setOriginalPolicyUrl] = useState<string>("");
+  const [originalTermsUrl, setOriginalTermsUrl] = useState<string>("");
+
+  const hasChanges = useMemo(
+    () =>
+      policyUrl.trim() !== originalPolicyUrl.trim() ||
+      termsUrl.trim() !== originalTermsUrl.trim(),
+    [policyUrl, originalPolicyUrl, termsUrl, originalTermsUrl]
+  );
 
   useEffect(() => {
     const loadPolicy = async () => {
@@ -56,23 +65,31 @@ const GivePolicy: React.FC<GivePolicyProps> = ({ triggerClassName, defaultOpen =
       try {
         const res = await fetch("/api/get-privacy-policy", { method: "GET", cache: "no-store" });
         if (!res.ok) {
-          setUrl("");
-          setOriginalUrl("");
+          setPolicyUrl("");
+          setTermsUrl("");
+          setOriginalPolicyUrl("");
+          setOriginalTermsUrl("");
           return;
         }
         const data = (await res.json()) as { success: boolean; data?: PrivacyDto | null };
-        if (data?.success && data.data?.url) {
-          setUrl(data.data.url);
-          setOriginalUrl(data.data.url);
+        if (data?.success && data.data) {
+          setPolicyUrl(data.data.url || "");
+          setTermsUrl(data.data.termsAdnConditions || "");
+          setOriginalPolicyUrl(data.data.url || "");
+          setOriginalTermsUrl(data.data.termsAdnConditions || "");
         } else {
-          setUrl("");
-          setOriginalUrl("");
+          setPolicyUrl("");
+          setTermsUrl("");
+          setOriginalPolicyUrl("");
+          setOriginalTermsUrl("");
         }
       } catch (err) {
         console.error("Fetch privacy policy failed", err);
-        toast.error("Failed to load current privacy policy");
-        setUrl("");
-        setOriginalUrl("");
+        toast.error("Failed to load current policy and terms URLs");
+        setPolicyUrl("");
+        setTermsUrl("");
+        setOriginalPolicyUrl("");
+        setOriginalTermsUrl("");
       } finally {
         setFetching(false);
       }
@@ -84,11 +101,14 @@ const GivePolicy: React.FC<GivePolicyProps> = ({ triggerClassName, defaultOpen =
     setIsOpen(open);
     if (!open) {
       setLoading(false);
-      if (hasChanges) setUrl(originalUrl);
+      if (hasChanges) {
+        setPolicyUrl(originalPolicyUrl);
+        setTermsUrl(originalTermsUrl);
+      }
     }
   };
 
-  const validateUrl = (value: string) => {
+  const validateHttpUrl = (value: string) => {
     const trimmed = value.trim();
     if (!trimmed) return "URL is required";
     try {
@@ -103,36 +123,47 @@ const GivePolicy: React.FC<GivePolicyProps> = ({ triggerClassName, defaultOpen =
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!isSuperAdmin) {
-      toast.error("Only Super Admin can update the privacy policy");
+      toast.error("Only Super Admin can update");
       return;
     }
     if (!hasChanges) {
       toast.info("No changes to save");
       return;
     }
-    const errMsg = validateUrl(url);
-    if (errMsg) {
-      toast.error(errMsg);
+
+    const urlErr = validateHttpUrl(policyUrl);
+    if (urlErr) {
+      toast.error(`Privacy Policy URL: ${urlErr}`);
       return;
     }
+    const termsErr = validateHttpUrl(termsUrl);
+    if (termsErr) {
+      toast.error(`Terms & Conditions URL: ${termsErr}`);
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch("/api/create-privacy-policy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim() }),
+        body: JSON.stringify({
+          url: policyUrl.trim(),
+          termsAdnConditions: termsUrl.trim(),
+        }),
       });
       const result = await res.json();
       if (res.ok && result?.success) {
-        toast.success("Privacy Policy updated successfully");
-        setOriginalUrl(url.trim());
+        toast.success("Privacy & Terms URLs updated");
+        setOriginalPolicyUrl(policyUrl.trim());
+        setOriginalTermsUrl(termsUrl.trim());
         setIsOpen(false);
       } else {
-        toast.error(result?.message || "Failed to update privacy policy");
+        toast.error(result?.message || "Failed to update URLs");
       }
     } catch (err) {
-      console.error("Privacy policy update error:", err);
-      toast.error("Something went wrong while updating privacy policy");
+      console.error("Update error:", err);
+      toast.error("Something went wrong while updating");
     } finally {
       setLoading(false);
     }
@@ -152,32 +183,33 @@ const GivePolicy: React.FC<GivePolicyProps> = ({ triggerClassName, defaultOpen =
           }
         >
           <Lock className="w-4 h-4" />
-          <span className="hidden sm:inline">Privacy Policy</span>
+          <span className="hidden sm:inline">Privacy & Terms</span>
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[680px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Lock className="w-5 h-5" />
-            <span>Give Policy</span>
+            <span>Privacy & Terms</span>
             <div className="ml-auto flex items-center gap-1 px-2 py-1 bg-indigo-50 text-indigo-600 rounded-full text-xs font-medium">
               <Shield className="w-3 h-3" />
               <span>Super Admin</span>
             </div>
           </DialogTitle>
           <DialogDescription>
-            Set or update the platform’s Privacy Policy URL. This is stored as a single upserted record and cached server-side.
+            Update the Privacy Policy and Terms & Conditions URLs. Stored as a single upserted record and cached server-side.
           </DialogDescription>
         </DialogHeader>
 
         {fetching ? (
           <div className="flex items-center justify-center py-10 text-gray-600">
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Loading current policy...
+            Loading current URLs...
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Privacy Policy URL */}
             <div className="space-y-2">
               <Label htmlFor="policyUrl" className="text-sm font-semibold flex items-center gap-2">
                 Privacy Policy URL
@@ -188,14 +220,36 @@ const GivePolicy: React.FC<GivePolicyProps> = ({ triggerClassName, defaultOpen =
                 type="url"
                 inputMode="url"
                 placeholder="https://example.com/privacy"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
+                value={policyUrl}
+                onChange={(e) => setPolicyUrl(e.target.value)}
                 autoComplete="off"
                 className="w-full transition-all duration-200 focus:ring-2 focus:ring-indigo-500"
                 disabled={loading}
               />
               <p className="text-xs text-gray-500">
-                Provide an http/https link to the live Privacy Policy page.
+                Must be an http/https link to the live Privacy Policy page.
+              </p>
+            </div>
+
+            {/* Terms & Conditions URL */}
+            <div className="space-y-2">
+              <Label htmlFor="termsUrl" className="text-sm font-semibold flex items-center gap-2">
+                Terms & Conditions URL
+                <Link2 className="w-3 h-3 text-indigo-500" />
+              </Label>
+              <Input
+                id="termsUrl"
+                type="url"
+                inputMode="url"
+                placeholder="https://example.com/terms"
+                value={termsUrl}
+                onChange={(e) => setTermsUrl(e.target.value)}
+                autoComplete="off"
+                className="w-full transition-all duration-200 focus:ring-2 focus:ring-indigo-500"
+                disabled={loading}
+              />
+              <p className="text-xs text-gray-500">
+                Must be an http/https link to the live Terms & Conditions page.
               </p>
             </div>
 
@@ -231,7 +285,10 @@ const GivePolicy: React.FC<GivePolicyProps> = ({ triggerClassName, defaultOpen =
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setUrl(originalUrl)}
+                  onClick={() => {
+                    setPolicyUrl(originalPolicyUrl);
+                    setTermsUrl(originalTermsUrl);
+                  }}
                   disabled={loading}
                   className="transition-all duration-200"
                 >

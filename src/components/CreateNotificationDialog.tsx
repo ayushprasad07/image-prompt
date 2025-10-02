@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import {
   Dialog,
@@ -14,86 +14,99 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Bell, Shield, Send, RotateCcw, MessageSquare, Type } from 'lucide-react';
+import { Bell, Shield, Send, RotateCcw, MessageSquare, Type, Image as ImageIcon } from "lucide-react";
 
-// Define proper TypeScript interfaces
 interface NotificationData {
   title: string;
   message: string;
+  // click_action is hardcoded; not exposed in UI
 }
 
 interface SessionUser {
   _id: string;
   email: string;
-  role: 'admin' | 'superadmin' | string;
+  role: "admin" | "superadmin" | string;
   name?: string;
 }
 
 const CreateNotificationDialog: React.FC = () => {
-  // Get user session for role-based functionality
   const { data: session } = useSession();
   const user = session?.user as SessionUser;
 
-  // State with proper TypeScript typing
+  const isSuperAdmin = user?.role === "superadmin";
+
   const [notificationData, setNotificationData] = useState<NotificationData>({
     title: "",
-    message: ""
+    message: "",
   });
   const [originalData, setOriginalData] = useState<NotificationData>({
     title: "",
-    message: ""
+    message: "",
   });
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+
   const [loading, setLoading] = useState<boolean>(false);
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [hasChanges, setHasChanges] = useState<boolean>(false);
 
-  // Role-based helper functions
-  const isSuperAdmin = user?.role === 'superadmin';
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Check if current form data differs from original (empty state)
   useEffect(() => {
-    const changed = 
+    const changed =
       notificationData.title !== originalData.title ||
-      notificationData.message !== originalData.message;
+      notificationData.message !== originalData.message ||
+      imageFile !== null;
     setHasChanges(changed);
-  }, [notificationData, originalData]);
+  }, [notificationData, originalData, imageFile]);
 
-  // Handle input changes for text fields
   const handleInputChange = (field: keyof NotificationData, value: string) => {
-    setNotificationData(prev => ({
+    setNotificationData((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
   };
 
-  // Reset form to original values (empty)
   const handleReset = () => {
     setNotificationData(originalData);
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // Reset form when dialog closes
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
-    
     if (!open) {
-      // Reset form state when closing if there are unsaved changes
       if (hasChanges) {
-        setNotificationData(originalData);
+        handleReset();
       }
       setLoading(false);
     }
   };
 
-  // Handle form submission
+  const handleImageChange = (file: File | null) => {
+    setImageFile(file);
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setImagePreview(url);
+    } else {
+      setImagePreview(null);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
+
     if (!isSuperAdmin) {
       toast.error("Only Super Admin can send notifications");
       return;
     }
 
-    if (!notificationData.title.trim() || !notificationData.message.trim()) {
+    const title = notificationData.title.trim();
+    const message = notificationData.message.trim();
+    const click_action = "MAIN_ACTIVITY"; // hardcoded
+
+    if (!title || !message) {
       toast.error("Title and message are required!");
       return;
     }
@@ -101,32 +114,31 @@ const CreateNotificationDialog: React.FC = () => {
     setLoading(true);
 
     try {
+      const form = new FormData();
+      form.append("title", title);
+      form.append("message", message);
+      form.append("click_action", click_action); // always present
+      if (imageFile) {
+        form.append("image", imageFile);
+      }
+
       const response = await fetch("/api/send-to-all", {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json" 
-        },
-        body: JSON.stringify({ 
-          title: notificationData.title.trim(), 
-          message: notificationData.message.trim(),
-          click_action: "MAIN_ACTIVITY"
-        }),
+        body: form,
       });
 
       const result = await response.json();
 
       if (response.ok && result.success) {
         toast.success("Notification sent successfully!");
-        
-        // Reset form after successful send
-        const emptyData: NotificationData = {
-          title: "",
-          message: ""
-        };
+
+        const emptyData: NotificationData = { title: "", message: "" };
         setNotificationData(emptyData);
         setOriginalData(emptyData);
-        
-        // Close dialog after successful send
+        setImageFile(null);
+        setImagePreview(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+
         setIsOpen(false);
       } else {
         toast.error(result.message || "Failed to send notification");
@@ -139,7 +151,6 @@ const CreateNotificationDialog: React.FC = () => {
     }
   };
 
-  // Don't render if user doesn't have permission
   if (!isSuperAdmin) {
     return null;
   }
@@ -147,7 +158,7 @@ const CreateNotificationDialog: React.FC = () => {
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button 
+        <Button
           variant="outline"
           className="bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200 hover:border-blue-300 transition-all duration-200 hover:scale-105 flex items-center gap-2"
         >
@@ -155,13 +166,12 @@ const CreateNotificationDialog: React.FC = () => {
           <span className="hidden sm:inline">Send Notification</span>
         </Button>
       </DialogTrigger>
-      
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+
+      <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Bell className="w-5 h-5" />
             <span>Send Push Notification</span>
-            {/* Super Admin indicator */}
             <div className="ml-auto flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-medium">
               <Shield className="w-3 h-3" />
               <span>Super Admin</span>
@@ -173,7 +183,6 @@ const CreateNotificationDialog: React.FC = () => {
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Super Admin Info */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="flex items-center gap-2 text-blue-700 font-medium mb-2">
               <Shield className="w-4 h-4" />
@@ -184,7 +193,7 @@ const CreateNotificationDialog: React.FC = () => {
             </p>
           </div>
 
-          {/* Title Field */}
+          {/* Title */}
           <div className="space-y-2">
             <Label htmlFor="title" className="text-sm font-semibold flex items-center gap-2">
               Notification Title *
@@ -194,7 +203,7 @@ const CreateNotificationDialog: React.FC = () => {
               id="title"
               type="text"
               value={notificationData.title}
-              onChange={(e) => handleInputChange('title', e.target.value)}
+              onChange={(e) => handleInputChange("title", e.target.value)}
               placeholder="Enter notification title"
               className="w-full transition-all duration-200 focus:ring-2 focus:ring-blue-500"
               disabled={loading}
@@ -205,7 +214,7 @@ const CreateNotificationDialog: React.FC = () => {
             </p>
           </div>
 
-          {/* Message Field */}
+          {/* Message */}
           <div className="space-y-2">
             <Label htmlFor="message" className="text-sm font-semibold flex items-center gap-2">
               Notification Message *
@@ -214,7 +223,9 @@ const CreateNotificationDialog: React.FC = () => {
             <Textarea
               id="message"
               value={notificationData.message}
-              onChange={(e : React.ChangeEvent<HTMLTextAreaElement>) => handleInputChange('message', e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                handleInputChange("message", e.target.value)
+              }
               placeholder="Enter notification message"
               rows={4}
               className="w-full transition-all duration-200 focus:ring-2 focus:ring-blue-500 resize-none"
@@ -226,29 +237,31 @@ const CreateNotificationDialog: React.FC = () => {
             </p>
           </div>
 
-          {/* Preview Section */}
-          {(notificationData.title || notificationData.message) && (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-gray-700 font-medium mb-3">
-                <Bell className="w-4 h-4" />
-                <span>Preview</span>
+          {/* Image Upload (optional) */}
+          <div className="space-y-2">
+            <Label htmlFor="image" className="text-sm font-semibold flex items-center gap-2">
+              Optional Image
+              <ImageIcon className="w-3 h-3 text-blue-500" />
+            </Label>
+            <Input
+              id="image"
+              type="file"
+              accept="image/*"
+              ref={fileInputRef}
+              onChange={(e) => handleImageChange(e.target.files?.[0] ?? null)}
+              disabled={loading}
+            />
+            {imagePreview && (
+              <div className="mt-2 border rounded-md overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={imagePreview} alt="Preview" className="max-h-48 w-full object-cover" />
               </div>
-              <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
-                {notificationData.title && (
-                  <div className="font-semibold text-gray-900 mb-1">
-                    {notificationData.title}
-                  </div>
-                )}
-                {notificationData.message && (
-                  <div className="text-gray-600 text-sm">
-                    {notificationData.message}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+            )}
+            <p className="text-xs text-gray-500">
+              If provided, the image will be uploaded to Cloudinary and attached to the notification.
+            </p>
+          </div>
 
-          {/* Changes Indicator */}
           {hasChanges && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
               <div className="flex items-center gap-2 text-amber-700 text-sm font-medium">
@@ -258,11 +271,10 @@ const CreateNotificationDialog: React.FC = () => {
             </div>
           )}
 
-          {/* Action Buttons */}
           <div className="flex gap-3 pt-4 border-t">
             <Button
               type="submit"
-              disabled={loading || !hasChanges || !notificationData.title.trim() || !notificationData.message.trim()}
+              disabled={loading || !notificationData.title.trim() || !notificationData.message.trim()}
               className="flex-1 bg-blue-600 hover:bg-blue-700 transition-all duration-200"
             >
               {loading ? (
@@ -277,20 +289,18 @@ const CreateNotificationDialog: React.FC = () => {
                 </>
               )}
             </Button>
-            
-            {hasChanges && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleReset}
-                disabled={loading}
-                className="transition-all duration-200"
-              >
-                <RotateCcw className="w-4 h-4 mr-2" />
-                Clear
-              </Button>
-            )}
-            
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleReset}
+              disabled={loading || (!hasChanges && !imageFile)}
+              className="transition-all duration-200"
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Clear
+            </Button>
+
             <Button
               type="button"
               variant="outline"
@@ -302,7 +312,6 @@ const CreateNotificationDialog: React.FC = () => {
             </Button>
           </div>
 
-          {/* Footer Info */}
           <div className="text-xs text-gray-500 text-center pt-2">
             Notifications will be sent immediately to all users subscribed to the app
           </div>

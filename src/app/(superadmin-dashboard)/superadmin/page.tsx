@@ -10,6 +10,17 @@ import SettingsDialog from '@/components/SettingDialog';
 import CreateNotificationDialog from '@/components/CreateNotificationDialog';
 import GivePolicy from '@/components/GivePolicy';
 
+// OPTIONAL: if using shadcn/ui Dialog primitives
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose
+} from "@/components/ui/dialog";
+
 interface AdminStats {
   total: number;
   totalPages: number;
@@ -27,28 +38,49 @@ interface Category {
   updatedAt: string;
 }
 
+interface WorkItem {
+  _id?: string;
+  imageUrl: string;
+  prompt: string;
+  tags?: string[];
+}
+
 const Superadmin = () => {
   // Existing states
   const [credentials, setCredentials] = useState({username: "", password: ""});
   const [isLoading, setIsLoading] = useState(false);
   const [Category, setCategories] = useState({name: ""});
   const [creatingCategory, setCreatingCategory] = useState(false);
-  
-  // New states for dashboard statistics
+
+  // Dashboard statistics
   const [adminStats, setAdminStats] = useState<AdminStats>({ total: 0, totalPages: 0 });
   const [workStats, setWorkStats] = useState<WorkStats>({ count: 0, totalWorks: 0 });
   const [statsLoading, setStatsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  // New states for categories management
+  // Categories management
   const [categories, setCategoriesList] = useState<Category[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [deletingCategory, setDeletingCategory] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
-  
-  // Search functionality state
+
+  // Search
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredCategories, setFilteredCategories] = useState<Category[]>([]);
+
+  // Category dialog state
+  const [openCategoryDialog, setOpenCategoryDialog] = useState(false);
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+  const [activeCategoryName, setActiveCategoryName] = useState<string>("");
+  const [categoryWorks, setCategoryWorks] = useState<WorkItem[]>([]);
+  const [categoryWorksLoading, setCategoryWorksLoading] = useState(false);
+  const [categoryWorksError, setCategoryWorksError] = useState<string | null>(null);
+  const [categoryWorksSource, setCategoryWorksSource] = useState<'cache'|'db'|null>(null);
+
+  // Superadmin username display and update form state
+  const [superadminUsername, setSuperadminUsername] = useState<string>("");
+  const [updatingUsername, setUpdatingUsername] = useState<boolean>(false);
+  const [newUsernameInput, setNewUsernameInput] = useState<string>("");
 
   // Fetch all categories
   const fetchCategories = async () => {
@@ -57,7 +89,7 @@ const Superadmin = () => {
       const response = await axios.get('/api/get-all-categories');
       if (response.data.success) {
         setCategoriesList(response.data.data);
-        setFilteredCategories(response.data.data); // Initialize filtered categories
+        setFilteredCategories(response.data.data);
       }
     } catch (error: any) {
       console.error("Error fetching categories:", error);
@@ -86,13 +118,12 @@ const Superadmin = () => {
       const response = await axios.delete(`/api/delete-category-by-id/${categoryId}`);
       if (response.data.success) {
         toast.success("Category deleted successfully");
-        // Remove from local state
         setCategoriesList(prev => prev.filter(cat => cat._id !== categoryId));
       }
     } catch (error: any) {
       console.error("Error deleting category:", error);
       if (axios.isAxiosError(error) && error.response) {
-        toast.error(error.response.data.message || "Failed to delete category"); 
+        toast.error(error.response.data.message || "Failed to delete category");
       } else {
         toast.error("Failed to delete category");
       }
@@ -106,33 +137,49 @@ const Superadmin = () => {
   const fetchDashboardStats = async () => {
     setStatsLoading(true);
     try {
-      // Fetch admin statistics
-      const adminResponse = await axios.get('/api/get-all-admins?limit=1&page=1');
-      if (adminResponse.data.success) {
+      // Prefer role-filtered superadmin count (backend should support this)
+      let adminResponse;
+      try {
+        adminResponse = await axios.get('/api/get-all-admins', {
+          params: { limit: 1, page: 1, role: 'superadmin' }
+        });
+      } catch {
+        adminResponse = null;
+      }
+
+      if (adminResponse?.data?.success && adminResponse.data.pagination) {
         setAdminStats({
           total: adminResponse.data.pagination.total,
           totalPages: adminResponse.data.pagination.totalPages
         });
+      } else {
+        // Fallback, first page only
+        const fallbackRes = await axios.get('/api/get-all-admins', {
+          params: { limit: 100, page: 1 }
+        });
+        if (fallbackRes.data.success) {
+          const admins: Array<{ role?: string }> = fallbackRes.data.data || [];
+          const superCount = admins.filter(a => a.role === 'superadmin').length;
+          setAdminStats({
+            total: superCount,
+            totalPages: fallbackRes.data.pagination?.totalPages ?? 1
+          });
+        }
       }
 
-      // Fetch work statistics
+      // Work statistics
       const workResponse = await axios.get('/api/get-all-works?page=1');
       if (workResponse.data.success) {
-        // Get total count by fetching multiple pages if needed
         let totalWorks = workResponse.data.count;
-        
-        // If there might be more pages, fetch the total by checking a higher page
         if (workResponse.data.count === 100) {
-          const totalResponse = await axios.get('/api/get-all-works?page=999'); // Get last page
+          const totalResponse = await axios.get('/api/get-all-works?page=999');
           if (totalResponse.data.success) {
-            // Calculate approximate total based on pagination
-            totalWorks = (998 * 100) + totalResponse.data.count; // Rough calculation
+            totalWorks = (998 * 100) + totalResponse.data.count;
           }
         }
-        
         setWorkStats({
           count: workResponse.data.count,
-          totalWorks: totalWorks
+          totalWorks
         });
       }
 
@@ -145,15 +192,60 @@ const Superadmin = () => {
     }
   };
 
-  // Fetch initial data on component mount (no auto-refresh)
+  // Optional: fetch current superadmin username from a getter endpoint, if available
+  const fetchCurrentSuperadminUsername = async () => {
+    try {
+      // If an endpoint exists, uncomment this:
+      // const res = await axios.get('/api/get-superadmin');
+      // setSuperadminUsername(res.data?.username ?? "");
+    } catch {
+      // ignore
+    }
+  };
+
+  // Initial load
   useEffect(() => {
     fetchDashboardStats();
     fetchCategories();
+    fetchCurrentSuperadminUsername();
   }, []);
+
+  // Category dialog open handler
+  const openCategory = async (categoryId: string, categoryName: string) => {
+    setActiveCategoryId(categoryId);
+    setActiveCategoryName(categoryName);
+    setOpenCategoryDialog(true);
+    await loadCategoryWorks(categoryId);
+  };
+
+  const loadCategoryWorks = async (categoryId: string) => {
+    console.log("Loading category works for category ID:", categoryId);
+    setCategoryWorksLoading(true);
+    setCategoryWorksError(null);
+    setCategoryWorks([]);
+    setCategoryWorksSource(null);
+
+    try {
+      const res = await axios.get(`/api/get-image-by-category/${categoryId}`);
+      if (res.status === 200) {
+        setCategoryWorks(res.data.works || []);
+        setCategoryWorksSource(res.data.source || null);
+      } else {
+        setCategoryWorksError("Failed to load works");
+        toast.error("Failed to load works for this category");
+      }
+    } catch (e: any) {
+      console.error("Error loading category works:", e);
+      setCategoryWorksError(e?.response?.data?.error || "Failed to load works");
+      toast.error(e?.response?.data?.error || "Failed to load works");
+    } finally {
+      setCategoryWorksLoading(false);
+    }
+  };
 
   const handleCategoryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCategories({...Category, [e.target.name]: e.target.value});
-  }
+  };
 
   const handleCategorySubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -161,14 +253,12 @@ const Superadmin = () => {
       toast.error("Please enter a category name");
       return;
     }
-    
     setCreatingCategory(true);
     try {
       const {name} = Category;
       const response = await axios.post("/api/create-category", {name});
       toast.success(response.data.message);
-      setCategories({name: ""}); // Reset form
-      // Refresh categories list
+      setCategories({name: ""});
       fetchCategories();
     } catch (error: any) {
       console.log("Error while creating category:", error);
@@ -180,25 +270,25 @@ const Superadmin = () => {
     } finally {
       setCreatingCategory(false);
     }
-  }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCredentials({...credentials, [e.target.name]: e.target.value});
-  }
+  };
 
+  // Create admin credentials
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!credentials.username.trim() || !credentials.password.trim()) {
       toast.error("Please fill in all fields");
       return;
     }
-    
     setIsLoading(true);
     try {
       const {username, password} = credentials;
       const response = await axios.post("/api/create-credentials", {username, password});
       toast.success(response.data.message);
-      setCredentials({username: "", password: ""}); // Reset form
+      setCredentials({username: "", password: ""});
     } catch (error: any) {
       console.log("Error while creating credentials:", error);
       if (axios.isAxiosError(error) && error.response) {
@@ -209,33 +299,40 @@ const Superadmin = () => {
     } finally {
       setIsLoading(false);
     }
-  }
-
-  // Handle search input change
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
   };
 
-  // Clear search
-  const clearSearch = () => {
-    setSearchQuery("");
-  };
-
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) {
-      return (num / 1000000).toFixed(1) + 'M';
-    } else if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'K';
+  // Update the superadmin username via PUT and reflect in UI
+  const handleUpdateSuperadminUsername = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const value = newUsernameInput.trim();
+    if (!value) {
+      toast.error("Please enter a new username");
+      return;
     }
-    return num.toString();
-  };
+    // optimistic UI
+    const prev = superadminUsername;
+    setUpdatingUsername(true);
+    setSuperadminUsername(value);
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+    try {
+      const res = await axios.put("/api/update-superadmin-username", { newUsername: value });
+      const updated = res?.data?.username ?? value;
+      setSuperadminUsername(updated);
+      setNewUsernameInput("");
+      toast.success(res?.data?.message || "Username updated");
+      // Optional: if using next-auth on client, update session user object:
+      // const { update } = useSession(); update({ user: { ...session?.user, username: updated }})
+    } catch (err: any) {
+      // rollback optimistic change
+      setSuperadminUsername(prev);
+      if (axios.isAxiosError(err) && err.response) {
+        toast.error(err.response.data?.message || "Failed to update username");
+      } else {
+        toast.error("Failed to update username");
+      }
+    } finally {
+      setUpdatingUsername(false);
+    }
   };
 
   // Confirmation Dialog Component
@@ -253,12 +350,12 @@ const Superadmin = () => {
           </div>
           <h3 className="text-xl font-bold text-gray-900">Confirm Deletion</h3>
         </div>
-        
+
         <p className="text-gray-700 mb-6">
-          Are you sure you want to delete the category <span className="font-semibold text-red-600">"{categoryName}"</span>? 
+          Are you sure you want to delete the category <span className="font-semibold text-red-600">"{categoryName}"</span>?
           This action cannot be undone.
         </p>
-        
+
         <div className="flex gap-3 justify-end">
           <button
             onClick={onCancel}
@@ -288,12 +385,89 @@ const Superadmin = () => {
     </div>
   );
 
+  // Category Dialog UI
+  const CategoryDialog = () => (
+    <Dialog open={openCategoryDialog} onOpenChange={(o) => { if (!o) { setOpenCategoryDialog(false); } }}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Category: {activeCategoryName}</DialogTitle>
+          <DialogDescription>
+            Prompts for this category {categoryWorksSource ? `(source: ${categoryWorksSource})` : ""}.
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Content area */}
+        <div className="min-h-[200px] max-h-[60vh] overflow-y-auto pr-1">
+          {categoryWorksLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="border rounded-lg p-3 animate-pulse">
+                  <div className="w-full h-32 bg-gray-200 rounded mb-3" />
+                  <div className="h-4 w-3/4 bg-gray-200 rounded mb-2" />
+                  <div className="h-3 w-1/2 bg-gray-100 rounded" />
+                </div>
+              ))}
+            </div>
+          ) : categoryWorksError ? (
+            <div className="p-4 border border-red-200 bg-red-50 rounded-lg">
+              <p className="text-red-700 text-sm">{categoryWorksError}</p>
+              <button
+                onClick={() => activeCategoryId && loadCategoryWorks(activeCategoryId)}
+                className="mt-3 px-3 py-2 rounded bg-red-600 text-white hover:bg-red-700 text-sm"
+              >
+                Retry
+              </button>
+            </div>
+          ) : categoryWorks.length === 0 ? (
+            <div className="p-6 text-center text-gray-600">
+              No prompts found for this category.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {categoryWorks.map((w, idx) => (
+                <div key={(w._id ?? '') + idx} className="border rounded-lg p-3 bg-white/90 hover:bg-white transition">
+                  <div className="w-full aspect-video overflow-hidden rounded mb-3 bg-gray-100">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={w.imageUrl}
+                      alt={w.prompt?.slice(0, 60) || 'work'}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                  <p className="text-sm text-gray-900 line-clamp-3">{w.prompt}</p>
+                  {Array.isArray(w.tags) && w.tags.length > 0 && (
+                    <div className="mt-2 flex gap-2 flex-wrap">
+                      {w.tags.map((t, i) => (
+                        <span key={i} className="px-2 py-0.5 text-xs rounded bg-orange-100 text-orange-700">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <DialogClose asChild>
+            <button className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800">
+              Close
+            </button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   return (
     <div className='py-10 pb-20 md:p-20 w-full'>
       <div className='w-full px-5 flex flex-col md:flex-row md:justify-between md:items-center gap-4'>
         <div>
           <h1 className='bg-opacity-50 bg-gradient-to-r from-neutral-600 to-neutral-900 bg-clip-text text-3xl font-bold text-transparent md:text-5xl'>
-            Super Admin
+            Super Admin {superadminUsername ? <span className="text-neutral-800 dark:text-neutral-200">• {superadminUsername}</span> : null}
           </h1>
           {lastUpdated && (
             <p className="text-sm text-gray-500 mt-2">
@@ -301,9 +475,31 @@ const Superadmin = () => {
             </p>
           )}
         </div>
-        
-        {/* Settings and Refresh Button */}
-        <div className='flex items-center gap-3'>
+
+        {/* Settings, Refresh, and Update Username */}
+        <div className='flex items-center gap-3 flex-wrap'>
+          <form
+            onSubmit={handleUpdateSuperadminUsername}
+            className="flex items-center gap-2"
+          >
+            <Input
+              placeholder="New superadmin username"
+              value={newUsernameInput}
+              onChange={(e) => setNewUsernameInput(e.target.value)}
+              className="h-9 w-56"
+            />
+            <button
+              type="submit"
+              disabled={updatingUsername}
+              className={cn(
+                "px-3 py-2 rounded-lg bg-neutral-900 text-white hover:bg-neutral-800 transition disabled:opacity-50 flex items-center gap-2"
+              )}
+            >
+              {updatingUsername ? <Loader className="w-4 h-4 animate-spin" /> : null}
+              Update
+            </button>
+          </form>
+
           <SettingsDialog/>
           <CreateNotificationDialog/>
           <GivePolicy/>
@@ -321,11 +517,17 @@ const Superadmin = () => {
         </div>
       </div>
 
-      
       <hr className='my-5'/>
-      
+
       {/* Enhanced Stats Section */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 p-4">
+      <div
+        className="
+          grid justify-items-stretch gap-4 mb-8 p-4
+          [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]
+          sm:[grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]
+          lg:[grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]
+        "
+      >
         {/* Total Admins Card */}
         <div className="bg-white/90 backdrop-blur-lg border border-gray-200 rounded-xl p-6 hover:bg-white transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/20 shadow-lg">
           <div className="flex items-center justify-between">
@@ -340,7 +542,7 @@ const Superadmin = () => {
               </p>
               {!statsLoading && adminStats.total > 0 && (
                 <p className="text-xs text-gray-400">
-                  {adminStats.totalPages} page{adminStats.totalPages !== 1 ? 's' : ''}
+                  {adminStats.totalPages} page{adminStats.totalPages !== 1 ? "s" : ""}
                 </p>
               )}
             </div>
@@ -350,7 +552,7 @@ const Superadmin = () => {
           </div>
         </div>
 
-        {/* Active Work Items Card */}
+        {/* Total Works */}
         <div className="bg-white/90 backdrop-blur-lg border border-gray-200 rounded-xl p-6 hover:bg-white transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-green-500/20 shadow-lg">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
@@ -363,9 +565,7 @@ const Superadmin = () => {
                 )}
               </p>
               {!statsLoading && workStats.totalWorks > 0 && (
-                <p className="text-xs text-gray-400">
-                  Creative works published
-                </p>
+                <p className="text-xs text-gray-400">Creative works published</p>
               )}
             </div>
             <div className="bg-green-100 p-3 rounded-xl ml-2 flex-shrink-0">
@@ -374,7 +574,7 @@ const Superadmin = () => {
           </div>
         </div>
 
-        {/* Recent Works Card */}
+        {/* Recent Works */}
         <div className="bg-white/90 backdrop-blur-lg border border-gray-200 rounded-xl p-6 hover:bg-white transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-purple-500/20 shadow-lg">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
@@ -387,47 +587,24 @@ const Superadmin = () => {
                 )}
               </p>
               {!statsLoading && workStats.count > 0 && (
-                <p className="text-xs text-gray-400">
-                  Latest batch loaded
-                </p>
+                <p className="text-xs text-gray-400">Latest batch loaded</p>
               )}
             </div>
             <div className="bg-purple-100 p-3 rounded-xl ml-2 flex-shrink-0">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg
+                className="w-6 h-6 text-purple-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-          </div>
-        </div>
-
-        {/* System Status Card */}
-        <div className="bg-white/90 backdrop-blur-lg border border-gray-200 rounded-xl p-6 hover:bg-white transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-indigo-500/20 shadow-lg">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-gray-600 text-sm font-medium truncate">System Status</p>
-              <p className="text-2xl md:text-3xl font-bold text-indigo-600 truncate">
-                {statsLoading ? (
-                  <Loader className="w-6 h-6 animate-spin inline" />
-                ) : (
-                  "Online"
-                )}
-              </p>
-              {!statsLoading && (
-                <p className="text-xs text-gray-400">
-                  All services operational
-                </p>
-              )}
-            </div>
-            <div className="bg-indigo-100 p-3 rounded-xl ml-2 flex-shrink-0">
-              <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Create credentials and category forms section - MOVED ABOVE CATEGORIES */}
+      {/* Forms */}
       <div className='grid grid-cols-1 md:grid-cols-2 gap-6 p-4 mb-8'>
         <div className="shadow-input mx-auto w-full max-w-md rounded-none bg-white p-4 md:rounded-2xl md:p-8 dark:bg-black">
           <h2 className="text-xl font-bold text-neutral-800 dark:text-neutral-200">
@@ -436,30 +613,30 @@ const Superadmin = () => {
           <p className="text-gray-600 dark:text-gray-400 text-sm mt-2">
             Please enter the username and password to create credentials for the admin
           </p>
-    
+
           <form className="my-8" onSubmit={handleSubmit}>
             <LabelInputContainer className="mb-4">
               <Label htmlFor="username">Username</Label>
-              <Input 
-                id="username" 
-                placeholder="Enter the username" 
-                name='username' 
-                type="text" 
+              <Input
+                id="username"
+                placeholder="Enter the username"
+                name='username'
+                type="text"
                 value={credentials.username}
-                onChange={handleChange} 
+                onChange={handleChange}
                 required
               />
             </LabelInputContainer>
             <LabelInputContainer className="mb-4">
               <Label htmlFor="password">Password</Label>
-              <Input 
-                id="password" 
-                placeholder="••••••••" 
-                name='password' 
+              <Input
+                id="password"
+                placeholder="••••••••"
+                name='password'
                 type="password"
-                value={credentials.password} 
+                value={credentials.password}
                 onChange={handleChange}
-                required 
+                required
               />
             </LabelInputContainer>
             <button
@@ -484,20 +661,20 @@ const Superadmin = () => {
             Create Category
           </h2>
           <p className="text-gray-600 dark:text-gray-400 text-sm mt-2">
-            Please enter the categories which you want to create for organizing works
+            Please enter the categories which to create for organizing works
           </p>
-    
+
           <form className="my-8" onSubmit={handleCategorySubmit}>
             <LabelInputContainer className="mb-4">
               <Label htmlFor="name">Category Name</Label>
-              <Input 
-                id="name" 
-                placeholder="Enter the Category name" 
-                name='name' 
+              <Input
+                id="name"
+                placeholder="Enter the Category name"
+                name='name'
                 type="text"
                 value={Category.name}
                 onChange={handleCategoryChange}
-                required 
+                required
               />
             </LabelInputContainer>
             <button
@@ -517,7 +694,7 @@ const Superadmin = () => {
         </div>
       </div>
 
-      {/* Categories Management Section */}
+      {/* Categories Management */}
       <div className="mb-8 p-4">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -542,12 +719,12 @@ const Superadmin = () => {
               type="text"
               placeholder="Search categories..."
               value={searchQuery}
-              onChange={handleSearchChange}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="block w-full pl-10 pr-12 py-3 border border-gray-200 rounded-xl bg-white/90 backdrop-blur-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 placeholder-gray-500 text-gray-900"
             />
             {searchQuery && (
               <button
-                onClick={clearSearch}
+                onClick={() => setSearchQuery("")}
                 className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -561,7 +738,6 @@ const Superadmin = () => {
         {/* Categories Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-10">
           {categoriesLoading ? (
-            // Loading skeleton
             Array.from({ length: 8 }).map((_, index) => (
               <div key={index} className="bg-white/90 backdrop-blur-lg border border-gray-200 rounded-xl p-4 animate-pulse">
                 <div className="flex items-center justify-between">
@@ -580,14 +756,14 @@ const Superadmin = () => {
                 {searchQuery ? "No categories found" : "No Categories Found"}
               </h3>
               <p className="text-gray-600">
-                {searchQuery 
+                {searchQuery
                   ? `No categories match "${searchQuery}". Try a different search term.`
                   : "Create your first category using the form above."
                 }
               </p>
               {searchQuery && (
                 <button
-                  onClick={clearSearch}
+                  onClick={() => setSearchQuery("")}
                   className="mt-3 px-4 py-2 text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors"
                 >
                   Clear search
@@ -596,9 +772,12 @@ const Superadmin = () => {
             </div>
           ) : (
             filteredCategories.map((category) => (
-              <div 
-                key={category._id} 
-                className="bg-white/90 backdrop-blur-lg border border-gray-200 rounded-xl p-4 hover:bg-white transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-orange-500/20 shadow-lg group"
+              <div
+                key={category._id}
+                className="bg-white/90 backdrop-blur-lg border border-gray-200 rounded-xl p-4 hover:bg-white transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-orange-500/20 shadow-lg group cursor-pointer"
+                onClick={() => openCategory(category._id, category.name)}
+                role="button"
+                aria-label={`Open ${category.name} prompts`}
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex-1 min-w-0">
@@ -609,13 +788,13 @@ const Superadmin = () => {
                     <Tag className="w-4 h-4 text-orange-600" />
                   </div>
                 </div>
-                
+
                 <div className="flex items-center justify-between">
                   <div className="text-xs text-gray-400">
                     ID: {category._id.slice(-8)}
                   </div>
                   <button
-                    onClick={() => setShowDeleteConfirm(category._id)}
+                    onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(category._id); }}
                     disabled={deletingCategory === category._id}
                     className="flex items-center gap-1 px-3 py-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-all duration-200 opacity-0 group-hover:opacity-100 disabled:opacity-50 text-sm"
                   >
@@ -631,8 +810,10 @@ const Superadmin = () => {
             ))
           )}
         </div>
-        {/* <hr className='my-4'></hr> */}
       </div>
+
+      {/* Category Dialog Mount */}
+      <CategoryDialog />
 
       {/* Delete Confirmation Dialog */}
       {showDeleteConfirm && (
@@ -670,4 +851,22 @@ const LabelInputContainer = ({
   );
 };
 
-export default Superadmin;
+// Helpers
+function formatNumber(num: number) {
+  if (num >= 1_000_000) {
+    return (num / 1_000_000).toFixed(1) + 'M';
+  } else if (num >= 1_000) {
+    return (num / 1_000).toFixed(1) + 'K';
+  }
+  return num.toString();
+}
+
+function formatDate(dateString: string) {
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
+}
+
+export default Superadmin
