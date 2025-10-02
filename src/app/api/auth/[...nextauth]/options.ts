@@ -1,13 +1,14 @@
+// src/app/api/auth/[...nextauth]/options.ts
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import dbConnect from "@/lib/dbConnect";
 import Admin from "@/model/Admin";
+import SuperAdmin from "@/model/SuperAdmin";
 import redis from "@/lib/redis";
 
-const SUPERADMIN_USERNAME = "superadmin";
-// bcrypt hashed password for default superadmin
-const SUPERADMIN_PASSWORD = "$2b$10$wWZlv6Q70mk118q17Ve.4OrQ8UC8O1RWm7CoJA/PvuFIh3TymRpEa";
+const DEFAULT_SUPERADMIN_USERNAME = "superadmin";
+const DEFAULT_SUPERADMIN_PASSWORD = "$2b$10$wWZlv6Q70mk118q17Ve.4OrQ8UC8O1RWm7CoJA/PvuFIh3TymRpEa"; // bcrypt hashed
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -19,68 +20,66 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials: any): Promise<any> {
+        const { identifier, password } = credentials;
         await dbConnect();
 
-        try {
-          // ✅ Default hardcoded superadmin
-          if (
-            credentials.identifier === SUPERADMIN_USERNAME &&
-            bcrypt.compareSync(credentials.password, SUPERADMIN_PASSWORD!)
-          ) {
-            return {
-              _id: SUPERADMIN_USERNAME,
-              username: SUPERADMIN_USERNAME,
-              role: "superadmin",
-            };
-          }
-
-          // ✅ Try Redis cache first
-          const cachedUser = await redis.get(`admin:${credentials.identifier}`);
-          if (cachedUser) {
-            const user = JSON.parse(cachedUser);
-            const isPasswordValid = await bcrypt.compare(
-              credentials.password,
-              user.password
-            );
-            if (isPasswordValid) {
-              return {
-                _id: user._id,
-                username: user.username,
-                role: user.role, // ✅ use role from DB (admin or superadmin)
-              };
-            }
-          }
-
-          // ✅ If not cached, query MongoDB
-          const user = await Admin.findOne({ username: credentials.identifier });
-          if (!user) throw new Error("Invalid credentials");
-
-          const isPasswordValid = await bcrypt.compare(
-            credentials.password,
-            user.password
-          );
-          if (!isPasswordValid) throw new Error("Invalid credentials");
-
-          // ✅ Cache user in Redis (TTL: 10 min)
-          await redis.setex(
-            `admin:${user.username}`,
-            600,
-            JSON.stringify({
-              _id: user._id.toString(),
-              username: user.username,
-              password: user.password, // keep hashed password for compare
-              role: user.role, // ✅ cache role as well
-            })
-          );
-
-          return {
-            _id: user._id.toString(),
-            username: user.username,
-            role: user.role, // ✅ role determines if they are admin or superadmin
-          };
-        } catch (error) {
-          throw new Error("Authentication failed");
+        // ✅ Try Redis cache first
+        const cached = await redis.get(`user:${identifier}`);
+        if (cached) {
+          const cachedUser = JSON.parse(cached);
+          const isValid = await bcrypt.compare(password, cachedUser.password);
+          if (isValid) return cachedUser;
         }
+
+        // ✅ Try SuperAdmin collection (username may have changed)
+        const superAdmin = await SuperAdmin.findOne({ username: identifier });
+        if (superAdmin) {
+          const isValid = await bcrypt.compare(password, superAdmin.password);
+          if (isValid) {
+            const userData = {
+              _id: superAdmin._id.toString(),
+              username: superAdmin.username,
+              role: "superadmin",
+              password: superAdmin.password, // hashed
+            };
+            // Cache for 10 min
+            await redis.setex(`user:${superAdmin.username}`, 600, JSON.stringify(userData));
+            return userData;
+          }
+        }
+
+        // ✅ Fallback: default hardcoded superadmin (if DB not updated yet)
+        if (
+          identifier === DEFAULT_SUPERADMIN_USERNAME &&
+          bcrypt.compareSync(password, DEFAULT_SUPERADMIN_PASSWORD)
+        ) {
+          const userData = {
+            _id: "default-superadmin",
+            username: DEFAULT_SUPERADMIN_USERNAME,
+            role: "superadmin",
+            password: DEFAULT_SUPERADMIN_PASSWORD,
+          };
+          await redis.setex(`user:${DEFAULT_SUPERADMIN_USERNAME}`, 600, JSON.stringify(userData));
+          return userData;
+        }
+
+        // ✅ Finally, check Admin collection
+        const admin = await Admin.findOne({ username: identifier });
+        if (admin) {
+          const isValid = await bcrypt.compare(password, admin.password);
+          if (isValid) {
+            const userData = {
+              _id: admin._id.toString(),
+              username: admin.username,
+              role: admin.role,
+              password: admin.password,
+            };
+            await redis.setex(`user:${admin.username}`, 600, JSON.stringify(userData));
+            return userData;
+          }
+        }
+
+        throw new Error("Invalid credentials");
       },
     }),
   ],
@@ -90,7 +89,7 @@ export const authOptions: NextAuthOptions = {
       if (token) {
         session.user._id = token._id;
         session.user.username = token.username;
-        session.user.role = token.role; // ✅ superadmin or admin
+        session.user.role = token.role;
       }
       return session;
     },
@@ -98,7 +97,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token._id = user._id;
         token.username = user.username;
-        token.role = user.role; // ✅ superadmin or admin
+        token.role = user.role;
       }
       return token;
     },
