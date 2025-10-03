@@ -3,13 +3,13 @@ import { getServerSession, User } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/options";
 import mongoose from "mongoose";
 import Admin from "@/model/Admin";
+import redis from "@/lib/redis";
 import { NextRequest, NextResponse } from "next/server";
 
-// /api/mark-as-superadmin/[adminid]
-
+// ✅ /api/mark-as-superadmin/[adminid]
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ adminid: string }> } // params as Promise
+  { params }: { params: Promise<{ adminid: string }> } // using params as Promise
 ) {
   await dbConnect();
 
@@ -25,6 +25,7 @@ export async function PATCH(
 
   try {
     const { adminid } = await params;
+
     if (!mongoose.Types.ObjectId.isValid(adminid)) {
       return NextResponse.json(
         { success: false, message: "Invalid admin ID" },
@@ -33,7 +34,6 @@ export async function PATCH(
     }
 
     const admin = await Admin.findById(adminid);
-
     if (!admin) {
       return NextResponse.json(
         { success: false, message: "Admin not found" },
@@ -48,9 +48,16 @@ export async function PATCH(
       );
     }
 
-    // Upgrade role
+    // ✅ Update role
     admin.role = "superadmin";
     await admin.save();
+
+    // ✅ Invalidate Redis caches (since data changed)
+    // We don’t know all cache keys, so remove all that match `admins:*`
+    const keys = await redis.keys("admins:*");
+    if (keys.length > 0) {
+      await redis.del(...keys);
+    }
 
     return NextResponse.json(
       {

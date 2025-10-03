@@ -50,22 +50,35 @@ export async function DELETE(
     // ✅ Delete all works created by this admin
     await Work.deleteMany({ adminId });
 
-    // ✅ Remove Redis caches
-    await redis.del("admins:all");
-    await redis.del(`admin:${adminid}`);
-    await redis.del(`works:admin:${adminid}`);
+    // ✅ Try Redis cache cleanup (non-blocking but complete)
+    try {
+      // Delete all cached admin lists (paginated)
+      const adminKeys = await redis.keys("admins:*");
+      if (adminKeys.length > 0) {
+        await redis.del(...adminKeys);
+      }
+
+      // Delete specific caches
+      await redis.del(`admin:${adminid}`);
+      await redis.del(`works:admin:${adminid}`);
+
+      console.log(`🧹 Cleared Redis caches for admin ${adminid}`);
+    } catch (redisError) {
+      console.warn("⚠️ Redis cleanup failed:", redisError);
+      // Do not throw — admin deletion already succeeded
+    }
 
     return NextResponse.json(
       {
         success: true,
-        message: "Admin and related works deleted successfully",
+        message: `Admin '${deletedAdmin.username}' and related works deleted successfully`,
       },
       { status: 200 }
     );
   } catch (error) {
     console.error("❌ Delete admin error:", error);
     return NextResponse.json(
-      { success: false, message: "Something went wrong" },
+      { success: false, message: "Something went wrong during deletion" },
       { status: 500 }
     );
   }
