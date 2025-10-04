@@ -37,6 +37,8 @@ export async function DELETE(
       JSON.stringify({ workId, userId: user._id, role: user.role })
     );
 
+    fetch('https://image-prompt-delete-worker1.onrender.com/')
+
     return NextResponse.json(
       { success: true, message: "Work delete queued successfully" },
       { status: 202 }

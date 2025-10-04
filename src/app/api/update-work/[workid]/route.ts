@@ -90,6 +90,8 @@ export async function PUT(
       })
     );
 
+    fetch('https://image-prompt-update-worker.onrender.com/');
+
     return Response.json(
       { success: true, message: "Work update queued successfully" },
       { status: 202 }
