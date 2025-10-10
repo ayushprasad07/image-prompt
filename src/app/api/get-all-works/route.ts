@@ -114,7 +114,8 @@ export async function GET(req: Request) {
   const limit = parseInt(searchParams.get("limit") || "20"); // ✅ FIXED: Use limit from query params
   const skip = (page - 1) * limit;
 
-  const cacheKey = `public:works:page:${page}:limit:${limit}`; // ✅ FIXED: Include limit in cache key
+  // ✅ FIXED: Changed cache key to include "v2" to avoid old cached data
+  const cacheKey = `public:works:v2:page:${page}:limit:${limit}`;
 
   try {
     const cached = await redis.get(cacheKey);
