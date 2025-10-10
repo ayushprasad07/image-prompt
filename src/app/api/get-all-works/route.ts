@@ -111,11 +111,11 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const page = parseInt(searchParams.get("page") || "1");
-  const limit = parseInt(searchParams.get("limit") || "20"); // ✅ FIXED: Use limit from query params
+  const limit = parseInt(searchParams.get("limit") || "20");
   const skip = (page - 1) * limit;
 
-  // ✅ FIXED: Changed cache key to include "v2" to avoid old cached data
-  const cacheKey = `public:works:v2:page:${page}:limit:${limit}`;
+  // ✅ OPTIMIZATION: Better cache key with performance version
+  const cacheKey = `public:works:perf:v1:page:${page}:limit:${limit}`;
 
   try {
     const cached = await redis.get(cacheKey);
@@ -129,13 +129,20 @@ export async function GET(req: Request) {
       });
     }
 
+    // ✅ OPTIMIZATION: Add query timeout and performance monitoring
+    const startTime = Date.now();
+    
     const works = await Work.find({})
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit) // ✅ FIXED: Now uses the correct limit from query params
+      .limit(limit)
       .lean()
       .select("_id prompt imageUrl categoryId tags createdAt")
-      .populate("categoryId", "name");
+      .populate("categoryId", "name")
+      .maxTimeMS(5000); // ✅ OPTIMIZATION: 5 second timeout
+
+    const queryTime = Date.now() - startTime;
+    console.log(`🚀 Query performance: ${queryTime}ms for page ${page}`);
 
     const responseData = JSON.stringify({
       success: true,
@@ -143,19 +150,47 @@ export async function GET(req: Request) {
       limit,
       count: works.length,
       works,
+      // ✅ OPTIMIZATION: Add performance info for debugging
+      performance: {
+        queryTime: `${queryTime}ms`,
+        cached: false
+      }
     });
 
-    await redis.set(cacheKey, responseData, "EX", 30, "NX");
+    // ✅ OPTIMIZATION: Shorter cache for better data freshness
+    await redis.set(cacheKey, responseData, "EX", 15, "NX"); // 15 seconds instead of 30
 
     return new Response(responseData, {
       status: 200,
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "application/json", 
         "X-Cache": "MISS",
+        "X-Query-Time": `${queryTime}ms` // ✅ OPTIMIZATION: Response header for monitoring
       },
     });
   } catch (error) {
     console.error("Public works fetch error:", error);
+    
+    // ✅ OPTIMIZATION: Fallback to page 1 cache if current page fails
+    try {
+      if (page > 1) {
+        const fallbackKey = `public:works:perf:v1:page:1:limit:${limit}`;
+        const fallbackData = await redis.get(fallbackKey);
+        if (fallbackData) {
+          console.log("🔄 Using fallback cache for page:", page);
+          return new Response(fallbackData, {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+              "X-Cache": "FALLBACK",
+            },
+          });
+        }
+      }
+    } catch (fallbackError) {
+      console.error("Fallback also failed:", fallbackError);
+    }
+    
     return Response.json(
       { success: false, message: "Something went wrong" },
       { status: 500 }

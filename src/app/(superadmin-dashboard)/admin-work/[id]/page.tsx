@@ -357,7 +357,6 @@ const AdminWorksPage = () => {
 
   const categoriesRef = useRef(categories);
   const worksRef = useRef(works);
-  const pageRef = useRef(page);
 
   useEffect(() => {
     categoriesRef.current = categories;
@@ -366,10 +365,6 @@ const AdminWorksPage = () => {
   useEffect(() => {
     worksRef.current = works;
   }, [works]);
-
-  useEffect(() => {
-    pageRef.current = page;
-  }, [page]);
 
   const isSuperAdmin = user?.role === 'superadmin';
   const isAdmin = user?.role === 'admin';
@@ -423,7 +418,8 @@ const AdminWorksPage = () => {
     }
   }, []);
 
-  const fetchWorks = useCallback(async (pageNum: number, showToast: boolean = false, silentUpdate: boolean = false) => {
+  // Main fetch function - removed from useEffect dependencies
+  const fetchWorksData = useCallback(async (pageNum: number, showToast: boolean = false, silentUpdate: boolean = false) => {
     if (!id) return;
     if (!silentUpdate) setLoading(true);
 
@@ -442,10 +438,9 @@ const AdminWorksPage = () => {
 
         setWorks(worksData);
         setPages(pagination?.pages || 1);
-        setPage(pagination?.page || pageNum);
         setTotalWorks(pagination?.total || 0);
 
-        fetchMissingCategories(worksData);
+        await fetchMissingCategories(worksData);
 
         if (showToast) toast.success("Works refreshed successfully");
       }
@@ -459,14 +454,14 @@ const AdminWorksPage = () => {
     }
   }, [id, fetchMissingCategories]);
 
+  // Polling logic
   const startPolling = useCallback(() => {
     if (!isSuperAdmin || pollingIntervalRef.current) return;
     setIsPolling(true);
     pollingIntervalRef.current = setInterval(() => {
-      const currentPage = pageRef.current;
-      fetchWorks(currentPage, false, true);
+      fetchWorksData(page, false, true);
     }, 3000);
-  }, [isSuperAdmin, fetchWorks]);
+  }, [isSuperAdmin, page, fetchWorksData]);
 
   const stopPolling = useCallback(() => {
     if (pollingIntervalRef.current) {
@@ -476,6 +471,7 @@ const AdminWorksPage = () => {
     setIsPolling(false);
   }, []);
 
+  // SuperAdmin polling effect
   useEffect(() => {
     if (isSuperAdmin && !isPolling) startPolling();
     else if (!isSuperAdmin && isPolling) stopPolling();
@@ -488,13 +484,12 @@ const AdminWorksPage = () => {
     };
   }, [isSuperAdmin, isPolling, startPolling, stopPolling]);
 
+  // FIXED: Separate effect for page changes - removed fetchWorks from dependencies
   useEffect(() => {
-    if (id) fetchWorks(1);
-  }, [id]);
-
-  useEffect(() => {
-    if (id && page > 1) fetchWorks(page);
-  }, [page, fetchWorks]);
+    if (id) {
+      fetchWorksData(page);
+    }
+  }, [id, page]); // Only depend on id and page
 
   const copyToClipboard = async (text: string, workId: string) => {
     try {
@@ -638,6 +633,7 @@ const AdminWorksPage = () => {
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > pages || loading) return;
     setPage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const togglePolling = useCallback(() => {
@@ -694,7 +690,7 @@ const AdminWorksPage = () => {
 
           <div className="hidden sm:flex items-center gap-2 lg:gap-3">
             <button
-              onClick={() => fetchWorks(page, true)}
+              onClick={() => fetchWorksData(page, true)}
               disabled={loading}
               className="flex items-center gap-2 px-3 lg:px-4 py-2 bg-white/80 backdrop-blur-sm border border-white/20 rounded-xl text-gray-700 hover:bg-white hover:shadow-lg transition-all duration-300 text-sm lg:text-base"
             >
@@ -725,7 +721,7 @@ const AdminWorksPage = () => {
               )}
               <button
                 onClick={() => {
-                  fetchWorks(page, true);
+                  fetchWorksData(page, true);
                   setShowMobileMenu(false);
                 }}
                 disabled={loading}

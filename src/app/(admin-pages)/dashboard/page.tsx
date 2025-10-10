@@ -1,5 +1,5 @@
 'use client'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import axios from 'axios'
 import Image from 'next/image'
 import { toast } from 'sonner'
@@ -51,14 +51,13 @@ const AdminWorks = () => {
   const [categories, setCategories] = useState<Record<string, string>>({})
   const [page, setPage] = useState(1)
   const [limit] = useState(100)
-  const [count, setCount] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [recentlyUpdated, setRecentlyUpdated] = useState<Set<string>>(new Set())
   const router = useRouter();
-
-  const totalPages = Math.ceil(count / limit) || 1
 
   const handleLogout = () => {
     signOut({ callbackUrl: "/sign-in" })
@@ -116,39 +115,59 @@ const AdminWorks = () => {
     setCategories(categoryMap)
   }
 
-  const fetchWorks = useCallback(async (pageNum: number, showToast: boolean = false) => {
+  // FIXED: Removed useCallback to prevent infinite loop
+  const fetchWorksData = async (pageNum: number, showToast: boolean = false) => {
     setLoading(true)
     try {
       const res = await axios.get(`/api/get-admin-works?page=${pageNum}&limit=${limit}`)
-      const { works: serverWorks, count: serverCount, message } = res.data as {
-        works: Work[]
-        count: number
+      
+      // FIXED: Match the new API response structure
+      const { data: serverWorks, pagination, success, message } = res.data as {
+        success: boolean
+        data: Work[]
         message?: string
+        pagination: {
+          page: number
+          limit: number
+          total: number
+          pages: number
+        }
       }
-      const safeWorks = Array.isArray(serverWorks) ? serverWorks : []
-      setWorks(safeWorks)
-      setCount(typeof serverCount === 'number' ? serverCount : 0)
-      setPage(pageNum)
-      if (safeWorks.length > 0) {
-        fetchCategories(safeWorks.map((w) => w.categoryId))
+
+      if (success) {
+        const safeWorks = Array.isArray(serverWorks) ? serverWorks : []
+        setWorks(safeWorks)
+        setTotalCount(pagination.total)
+        setTotalPages(pagination.pages)
+        
+        if (safeWorks.length > 0) {
+          await fetchCategories(safeWorks.map((w) => w.categoryId))
+        }
+        
+        if (showToast && message) {
+          toast.success(message)
+        }
       }
-      if (showToast && message) {
-        toast.success(message)
-      }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error fetching works:", err)
-      toast.error("Failed to fetch works")
+      const errorMessage = err.response?.data?.message || "Failed to fetch works"
+      toast.error(errorMessage)
+      setWorks([])
+      setTotalCount(0)
+      setTotalPages(1)
     } finally {
       setLoading(false)
     }
-  }, [limit])
+  }
 
-  const handleWorkCreated = useCallback(() => {
+  const handleWorkCreated = () => {
     toast.success("New work added to your collection!")
-    fetchWorks(page, false)
-  }, [fetchWorks, page])
+    // Reset to page 1 when new work is created
+    setPage(1)
+    fetchWorksData(1, false)
+  }
 
-  const handleWorkUpdated = useCallback((workId: string, updatedData: Partial<Work>) => {
+  const handleWorkUpdated = (workId: string, updatedData: Partial<Work>) => {
     setWorks(prev =>
       prev.map(w =>
         w._id === workId
@@ -175,9 +194,9 @@ const AdminWorks = () => {
       })
     }, 3000)
     toast.success("Work updated successfully!")
-  }, [])
+  }
 
-  const handleOptimisticSuccess = useCallback((workId: string) => {
+  const handleOptimisticSuccess = (workId: string) => {
     setWorks(prev =>
       prev.map(w =>
         w._id === workId
@@ -185,9 +204,9 @@ const AdminWorks = () => {
           : w
       )
     )
-  }, [])
+  }
 
-  const handleOptimisticError = useCallback((workId: string, errorMessage: string) => {
+  const handleOptimisticError = (workId: string, errorMessage: string) => {
     setWorks(prev =>
       prev.map(w =>
         w._id === workId && w.originalData
@@ -201,26 +220,40 @@ const AdminWorks = () => {
       return n
     })
     toast.error(`Update failed: ${errorMessage}`)
-  }, [])
+  }
 
   const handleDeleteWork = async (workid: string) => {
     const originalWorks = works
-    const originalCount = count
+    const originalCount = totalCount
+    const originalPages = totalPages
+    
     setWorks(prev => prev.filter(w => w._id !== workid))
-    setCount(prev => Math.max(0, prev - 1))
+    setTotalCount(prev => Math.max(0, prev - 1))
+    
     try {
       setIsDeleting(true)
       const res = await axios.delete(`/api/delete-work/${workid}`)
-      if (res.status === 202) {
+      
+      if (res.status === 202 || res.status === 200) {
         toast.success(res.data.message || "Work deleted successfully")
+        
+        // If current page becomes empty and it's not page 1, go to previous page
+        if (works.length === 1 && page > 1) {
+          setPage(page - 1)
+        } else {
+          // Refresh current page
+          fetchWorksData(page, false)
+        }
       } else {
         setWorks(originalWorks)
-        setCount(originalCount)
+        setTotalCount(originalCount)
+        setTotalPages(originalPages)
         toast.error(res.data.message || "Failed to delete work")
       }
     } catch (err) {
       setWorks(originalWorks)
-      setCount(originalCount)
+      setTotalCount(originalCount)
+      setTotalPages(originalPages)
       console.error("Delete work error:", err)
       toast.error("Something went wrong while deleting")
     } finally {
@@ -228,22 +261,23 @@ const AdminWorks = () => {
     }
   }
 
+  // FIXED: useEffect only depends on page, not on fetchWorksData
   useEffect(() => {
-    fetchWorks(page)
-  }, [page, fetchWorks])
+    fetchWorksData(page)
+  }, [page])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-900">
       <div className="fixed top-6 right-6 z-50 flex justify-end gap-4 items-center">
         <button
-          onClick={() => fetchWorks(page, true)}
+          onClick={() => fetchWorksData(page, true)}
           disabled={loading}
           className="bg-white/90 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-2 shadow-sm hover:shadow-lg transition-all duration-300 flex items-center gap-2 text-gray-700"
         >
           <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
           <span className="hidden sm:inline">Refresh</span>
         </button>
-        <CreateWorkModal onWorkCreated={() => router.refresh()} />
+        <CreateWorkModal onWorkCreated={handleWorkCreated} />
         <Button onClick={handleLogout} className='px-4 py-2 rounded-md text-white cursor-pointer dark:text-white text-center relative overflow-hidden'>
           Logout
         </Button>
@@ -264,7 +298,7 @@ const AdminWorks = () => {
             <div className="group bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-white/20 dark:border-slate-700/50 rounded-2xl px-8 py-4 shadow-sm hover:shadow-lg transition-all duration-300 hover:scale-105">
               <div className="text-center">
                 <div className="text-3xl font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 transition-colors duration-300">
-                  {count}
+                  {totalCount}
                   {loading && <Loader className="inline ml-2 w-5 h-5 animate-spin" />}
                 </div>
                 <div className="text-sm text-slate-600 dark:text-slate-400 font-medium">Total Works</div>
@@ -355,12 +389,11 @@ const AdminWorks = () => {
                       {work.prompt}
                     </h3>
 
-                    {/* New: Tags row */}
                     {Array.isArray(work.tags) && work.tags.filter(t => t && t.trim().length > 0).length > 0 && (
                       <div className="flex flex-wrap gap-2">
                         {work.tags
                           .filter((t) => t && t.trim().length > 0)
-                          .slice(0, 8) // cap visible tags; tweak as needed
+                          .slice(0, 8)
                           .map((tag, i) => (
                             <span
                               key={`${work._id}-tag-${i}-${tag}`}
