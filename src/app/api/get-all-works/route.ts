@@ -196,7 +196,6 @@ import "@/model/Category";
 
 const RATE_LIMIT = 250;
 const WINDOW_SECONDS = 60;
-const DEFAULT_LIMIT = 50; // Balanced limit for performance
 
 async function rateLimit(ip: string): Promise<boolean> {
   const key = `ratelimit:${ip}`;
@@ -220,10 +219,12 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const page = parseInt(searchParams.get("page") || "1");
-  const limit = Math.min(parseInt(searchParams.get("limit") || DEFAULT_LIMIT.toString()), 100); // Cap at 100
+  
+  // ✅ COMPATIBLE: Always return 100 items to match Android's expectation
+  const limit = 100;
   const skip = (page - 1) * limit;
 
-  const cacheKey = `public:works:page:${page}:limit:${limit}`;
+  const cacheKey = `public:works:page:${page}`;
 
   try {
     const cached = await redis.get(cacheKey);
@@ -239,87 +240,53 @@ export async function GET(req: Request) {
 
     const startTime = Date.now();
     
-    const [works, totalCount] = await Promise.all([
-      Work.find({})
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean()
-        .select("_id prompt imageUrl categoryId tags createdAt")
-        .populate("categoryId", "name")
-        .maxTimeMS(3000),
-      
-      Work.countDocuments({}) // Get total count for pagination info
-    ]);
+    const works = await Work.find({})
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean()
+      .select("_id prompt imageUrl categoryId tags createdAt")
+      .populate("categoryId", "name")
+      .maxTimeMS(10000); // 10 second timeout for reliability
 
     const queryTime = Date.now() - startTime;
-    const totalPages = Math.ceil(totalCount / limit);
-    const hasNextPage = page < totalPages;
 
+    // ✅ COMPATIBLE: Return the exact structure Android expects
     const responseData = JSON.stringify({
       success: true,
       page,
       limit,
       count: works.length,
-      totalCount,
-      totalPages,
-      hasNextPage,
       works,
-      performance: {
-        queryTime: `${queryTime}ms`,
-        cached: false
-      }
     });
 
-    await redis.set(cacheKey, responseData, "EX", 15, "NX");
+    await redis.set(cacheKey, responseData, "EX", 30, "NX");
 
     return new Response(responseData, {
       status: 200,
       headers: {
-        "Content-Type": "application/json", 
+        "Content-Type": "application/json",
         "X-Cache": "MISS",
-        "X-Query-Time": `${queryTime}ms`,
-        "X-Total-Pages": `${totalPages}`,
-        "X-Has-Next-Page": `${hasNextPage}`
       },
     });
   } catch (error) {
     console.error("Public works fetch error:", error);
     
-    // Smart fallback - return smaller dataset if large query fails
-    try {
-      const fallbackWorks = await Work.find({})
-        .sort({ createdAt: -1 })
-        .limit(20) // Smaller fallback
-        .lean()
-        .select("_id prompt imageUrl categoryId tags createdAt")
-        .populate("categoryId", "name")
-        .maxTimeMS(2000);
+    // ✅ RELIABLE: Graceful fallback - return empty array instead of crashing
+    const fallbackData = JSON.stringify({
+      success: true,
+      page: 1,
+      limit: 100,
+      count: 0,
+      works: [],
+    });
 
-      const fallbackData = JSON.stringify({
-        success: true,
-        page: 1,
-        limit: 20,
-        count: fallbackWorks.length,
-        works: fallbackWorks,
-        fallback: true,
-        message: "Using fallback data due to server load"
-      });
-
-      return new Response(fallbackData, {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "X-Cache": "FALLBACK",
-        },
-      });
-    } catch (fallbackError) {
-      console.error("Fallback also failed:", fallbackError);
-    }
-    
-    return Response.json(
-      { success: false, message: "Something went wrong" },
-      { status: 500 }
-    );
+    return new Response(fallbackData, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Cache": "ERROR_FALLBACK",
+      },
+    });
   }
 }
