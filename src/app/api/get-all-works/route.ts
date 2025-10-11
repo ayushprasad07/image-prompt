@@ -3,7 +3,7 @@ import Work from "@/model/Work";
 import redis from "@/lib/redis";
 import "@/model/Category";
 
-const RATE_LIMIT = 250;
+const RATE_LIMIT = 290;
 const WINDOW_SECONDS = 60;
 
 async function rateLimit(ip: string): Promise<boolean> {
@@ -46,19 +46,24 @@ export async function GET(req: Request) {
       });
     }
 
+    // ✅ Get total count from database
+    const totalCount = await Work.countDocuments({});
+
     const works = await Work.find({})
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean()
-      .select("_id prompt imageUrl categoryId tags createdAt") // ✅ include tags
+      .select("_id prompt imageUrl categoryId tags createdAt")
       .populate("categoryId", "name");
 
     const responseData = JSON.stringify({
       success: true,
       page,
       limit,
-      count: works.length,
+      count: works.length, // Items on current page
+      total: totalCount,   // ✅ Total items in database
+      totalPages: Math.ceil(totalCount / limit), // ✅ Total pages
       works,
     });
 
@@ -79,6 +84,7 @@ export async function GET(req: Request) {
     );
   }
 }
+
 
 // // src/app/api/get-all-works/route.ts
 // import dbConnect from "@/lib/dbConnect";

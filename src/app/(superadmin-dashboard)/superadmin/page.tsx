@@ -10,8 +10,6 @@ import SettingsDialog from '@/components/SettingDialog';
 import CreateNotificationDialog from '@/components/CreateNotificationDialog';
 import GivePolicy from '@/components/GivePolicy';
 
-
-// OPTIONAL: if using shadcn/ui Dialog primitives
 import {
   Dialog,
   DialogContent,
@@ -22,18 +20,16 @@ import {
   DialogClose
 } from "@/components/ui/dialog";
 
-
 interface AdminStats {
   total: number;
   totalPages: number;
 }
 
-
 interface WorkStats {
   count: number;
   totalWorks: number;
+  recentWorks: number; // ✅ Added for 24-hour count
 }
-
 
 interface Category {
   _id: string;
@@ -42,14 +38,13 @@ interface Category {
   updatedAt: string;
 }
 
-
 interface WorkItem {
   _id?: string;
   imageUrl: string;
   prompt: string;
   tags?: string[];
+  createdAt?: string; // ✅ Added for filtering
 }
-
 
 const Superadmin = () => {
   // Existing states
@@ -58,13 +53,15 @@ const Superadmin = () => {
   const [Category, setCategories] = useState({name: ""});
   const [creatingCategory, setCreatingCategory] = useState(false);
 
-
   // Dashboard statistics
   const [adminStats, setAdminStats] = useState<AdminStats>({ total: 0, totalPages: 0 });
-  const [workStats, setWorkStats] = useState<WorkStats>({ count: 0, totalWorks: 0 });
+  const [workStats, setWorkStats] = useState<WorkStats>({ 
+    count: 0, 
+    totalWorks: 0,
+    recentWorks: 0 // ✅ Initialize recent works
+  });
   const [statsLoading, setStatsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-
 
   // Categories management
   const [categories, setCategoriesList] = useState<Category[]>([]);
@@ -72,11 +69,9 @@ const Superadmin = () => {
   const [deletingCategory, setDeletingCategory] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
-
   // Search
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredCategories, setFilteredCategories] = useState<Category[]>([]);
-
 
   // Category dialog state
   const [openCategoryDialog, setOpenCategoryDialog] = useState(false);
@@ -87,12 +82,10 @@ const Superadmin = () => {
   const [categoryWorksError, setCategoryWorksError] = useState<string | null>(null);
   const [categoryWorksSource, setCategoryWorksSource] = useState<'cache'|'db'|null>(null);
 
-
   // Superadmin username display and update form state
   const [superadminUsername, setSuperadminUsername] = useState<string>("");
   const [updatingUsername, setUpdatingUsername] = useState<boolean>(false);
   const [newUsernameInput, setNewUsernameInput] = useState<string>("");
-
 
   // Fetch all categories
   const fetchCategories = async () => {
@@ -111,7 +104,6 @@ const Superadmin = () => {
     }
   };
 
-
   // Filter categories based on search query
   useEffect(() => {
     if (searchQuery.trim() === "") {
@@ -123,7 +115,6 @@ const Superadmin = () => {
       setFilteredCategories(filtered);
     }
   }, [searchQuery, categories]);
-
 
   // Delete category function
   const deleteCategory = async (categoryId: string) => {
@@ -147,12 +138,11 @@ const Superadmin = () => {
     }
   };
 
-
-  // Fetch dashboard statistics
+  // ✅ UPDATED: Fetch dashboard statistics with 24-hour filtering
   const fetchDashboardStats = async () => {
     setStatsLoading(true);
     try {
-      // Prefer role-filtered superadmin count (backend should support this)
+      // Fetch admin stats
       let adminResponse;
       try {
         adminResponse = await axios.get('/api/get-all-admins', {
@@ -162,14 +152,13 @@ const Superadmin = () => {
         adminResponse = null;
       }
 
-
       if (adminResponse?.data?.success && adminResponse.data.pagination) {
         setAdminStats({
           total: adminResponse.data.pagination.total,
           totalPages: adminResponse.data.pagination.totalPages
         });
       } else {
-        // Fallback, first page only
+        // Fallback
         const fallbackRes = await axios.get('/api/get-all-admins', {
           params: { limit: 100, page: 1 }
         });
@@ -183,23 +172,29 @@ const Superadmin = () => {
         }
       }
 
-
-      // Work statistics
+      // ✅ Work statistics - Filter for last 24 hours on frontend
       const workResponse = await axios.get('/api/get-all-works?page=1');
       if (workResponse.data.success) {
-        let totalWorks = workResponse.data.count;
-        if (workResponse.data.count === 100) {
-          const totalResponse = await axios.get('/api/get-all-works?page=999');
-          if (totalResponse.data.success) {
-            totalWorks = (998 * 100) + totalResponse.data.count;
-          }
-        }
+        const total = workResponse.data.total ?? 0;
+        const count = workResponse.data.count ?? 0;
+        const works: WorkItem[] = workResponse.data.works ?? [];
+        
+        // ✅ Calculate 24 hours ago timestamp
+        const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
+        
+        // ✅ Filter works created in last 24 hours
+        const recentWorks = works.filter((work) => {
+          if (!work.createdAt) return false;
+          const workTimestamp = new Date(work.createdAt).getTime();
+          return workTimestamp >= twentyFourHoursAgo;
+        });
+        
         setWorkStats({
-          count: workResponse.data.count,
-          totalWorks
+          count: count,
+          totalWorks: total,
+          recentWorks: recentWorks.length // ✅ Count of recent works in last 24 hours
         });
       }
-
 
       setLastUpdated(new Date());
     } catch (error: any) {
@@ -209,7 +204,6 @@ const Superadmin = () => {
       setStatsLoading(false);
     }
   };
-
 
   // Optional: fetch current superadmin username from a getter endpoint, if available
   const fetchCurrentSuperadminUsername = async () => {
@@ -222,14 +216,13 @@ const Superadmin = () => {
     }
   };
 
-
   // Initial load
   useEffect(() => {
     fetchDashboardStats();
     fetchCategories();
     fetchCurrentSuperadminUsername();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
 
   // Category dialog open handler
   const openCategory = async (categoryId: string, categoryName: string) => {
@@ -239,14 +232,12 @@ const Superadmin = () => {
     await loadCategoryWorks(categoryId);
   };
 
-
   const loadCategoryWorks = async (categoryId: string) => {
     console.log("Loading category works for category ID:", categoryId);
     setCategoryWorksLoading(true);
     setCategoryWorksError(null);
     setCategoryWorks([]);
     setCategoryWorksSource(null);
-
 
     try {
       const res = await axios.get(`/api/get-image-by-category/${categoryId}`);
@@ -266,11 +257,9 @@ const Superadmin = () => {
     }
   };
 
-
   const handleCategoryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCategories({...Category, [e.target.name]: e.target.value});
   };
-
 
   const handleCategorySubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -297,11 +286,9 @@ const Superadmin = () => {
     }
   };
 
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCredentials({...credentials, [e.target.name]: e.target.value});
   };
-
 
   // Create admin credentials
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -328,7 +315,6 @@ const Superadmin = () => {
     }
   };
 
-
   // Update the superadmin username via PUT and reflect in UI
   const handleUpdateSuperadminUsername = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -337,11 +323,9 @@ const Superadmin = () => {
       toast.error("Please enter a new username");
       return;
     }
-    // optimistic UI
     const prev = superadminUsername;
     setUpdatingUsername(true);
     setSuperadminUsername(value);
-
 
     try {
       const res = await axios.put("/api/update-superadmin-username", { newUsername: value });
@@ -349,10 +333,7 @@ const Superadmin = () => {
       setSuperadminUsername(updated);
       setNewUsernameInput("");
       toast.success(res?.data?.message || "Username updated");
-      // Optional: if using next-auth on client, update session user object:
-      // const { update } = useSession(); update({ user: { ...session?.user, username: updated }})
     } catch (err: any) {
-      // rollback optimistic change
       setSuperadminUsername(prev);
       if (axios.isAxiosError(err) && err.response) {
         toast.error(err.response.data?.message || "Failed to update username");
@@ -363,7 +344,6 @@ const Superadmin = () => {
       setUpdatingUsername(false);
     }
   };
-
 
   // Confirmation Dialog Component
   const DeleteConfirmDialog = ({ categoryId, categoryName, onConfirm, onCancel }: {
@@ -381,12 +361,10 @@ const Superadmin = () => {
           <h3 className="text-xl font-bold text-gray-900">Confirm Deletion</h3>
         </div>
 
-
         <p className="text-gray-700 mb-6">
           Are you sure you want to delete the category <span className="font-semibold text-red-600">"{categoryName}"</span>?
           This action cannot be undone.
         </p>
-
 
         <div className="flex gap-3 justify-end">
           <button
@@ -417,7 +395,6 @@ const Superadmin = () => {
     </div>
   );
 
-
   // Category Dialog UI
   const CategoryDialog = () => (
     <Dialog open={openCategoryDialog} onOpenChange={(o) => { if (!o) { setOpenCategoryDialog(false); } }}>
@@ -429,8 +406,6 @@ const Superadmin = () => {
           </DialogDescription>
         </DialogHeader>
 
-
-        {/* Content area */}
         <div className="min-h-[200px] max-h-[60vh] overflow-y-auto pr-1">
           {categoryWorksLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -485,7 +460,6 @@ const Superadmin = () => {
           )}
         </div>
 
-
         <DialogFooter>
           <DialogClose asChild>
             <button className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800">
@@ -496,7 +470,6 @@ const Superadmin = () => {
       </DialogContent>
     </Dialog>
   );
-
 
   return (
     <div className='py-10 pb-20 md:p-20 w-full'>
@@ -512,8 +485,6 @@ const Superadmin = () => {
           )}
         </div>
 
-
-        {/* Settings, Refresh */}
         <div className='flex items-center gap-3 flex-wrap'>
           <SettingsDialog/>
           <CreateNotificationDialog/>
@@ -532,9 +503,7 @@ const Superadmin = () => {
         </div>
       </div>
 
-
       <hr className='my-5'/>
-
 
       {/* Enhanced Stats Section */}
       <div
@@ -569,7 +538,6 @@ const Superadmin = () => {
           </div>
         </div>
 
-
         {/* Total Works */}
         <div className="bg-white/90 backdrop-blur-lg border border-gray-200 rounded-xl p-6 hover:bg-white transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-green-500/20 shadow-lg">
           <div className="flex items-center justify-between">
@@ -592,8 +560,7 @@ const Superadmin = () => {
           </div>
         </div>
 
-
-        {/* Recent Works */}
+        {/* ✅ Recent Works - Shows works from last 24 hours */}
         <div className="bg-white/90 backdrop-blur-lg border border-gray-200 rounded-xl p-6 hover:bg-white transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-purple-500/20 shadow-lg">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
@@ -602,11 +569,11 @@ const Superadmin = () => {
                 {statsLoading ? (
                   <Loader className="w-6 h-6 animate-spin inline" />
                 ) : (
-                  formatNumber(workStats.count)
+                  formatNumber(workStats.recentWorks)
                 )}
               </p>
-              {!statsLoading && workStats.count > 0 && (
-                <p className="text-xs text-gray-400">Latest batch loaded</p>
+              {!statsLoading && (
+                <p className="text-xs text-gray-400">Uploaded in last 24 hours</p>
               )}
             </div>
             <div className="bg-purple-100 p-3 rounded-xl ml-2 flex-shrink-0">
@@ -623,7 +590,6 @@ const Superadmin = () => {
         </div>
       </div>
 
-
       {/* Forms */}
       <div className='grid grid-cols-1 md:grid-cols-3 gap-6 p-4 mb-8'>
         <div className="shadow-input mx-auto w-full max-w-md rounded-none bg-white p-4 md:rounded-2xl md:p-8 dark:bg-black">
@@ -633,7 +599,6 @@ const Superadmin = () => {
           <p className="text-gray-600 dark:text-gray-400 text-sm mt-2">
             Please enter the username and password to create credentials for the admin
           </p>
-
 
           <form className="my-8" onSubmit={handleSubmit}>
             <LabelInputContainer className="mb-4">
@@ -676,7 +641,6 @@ const Superadmin = () => {
           </form>
         </div>
 
-
         <div className="shadow-input mx-auto w-full max-w-md rounded-none bg-white p-4 md:rounded-2xl md:p-8 dark:bg-black">
           <h2 className="text-xl font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-2">
             <Plus className="w-5 h-5" />
@@ -685,7 +649,6 @@ const Superadmin = () => {
           <p className="text-gray-600 dark:text-gray-400 text-sm mt-2">
             Please enter the categories which to create for organizing works
           </p>
-
 
           <form className="my-8" onSubmit={handleCategorySubmit}>
             <LabelInputContainer className="mb-4">
@@ -752,7 +715,6 @@ const Superadmin = () => {
         </div>
       </div>
 
-
       {/* Categories Management */}
       <div className="mb-8 p-4">
         <div className="flex items-center justify-between mb-6">
@@ -767,7 +729,6 @@ const Superadmin = () => {
             </p>
           </div>
         </div>
-
 
         {/* Search Bar */}
         <div className="mb-6">
@@ -794,7 +755,6 @@ const Superadmin = () => {
             )}
           </div>
         </div>
-
 
         {/* Categories Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-10">
@@ -850,7 +810,6 @@ const Superadmin = () => {
                   </div>
                 </div>
 
-
                 <div className="flex items-center justify-between">
                   <div className="text-xs text-gray-400">
                     ID: {category._id.slice(-8)}
@@ -874,10 +833,8 @@ const Superadmin = () => {
         </div>
       </div>
 
-
       {/* Category Dialog Mount */}
       <CategoryDialog />
-
 
       {/* Delete Confirmation Dialog */}
       {showDeleteConfirm && (
@@ -892,7 +849,6 @@ const Superadmin = () => {
   )
 }
 
-
 const BottomGradient = () => {
   return (
     <>
@@ -901,7 +857,6 @@ const BottomGradient = () => {
     </>
   );
 };
-
 
 const LabelInputContainer = ({
   children,
@@ -917,7 +872,6 @@ const LabelInputContainer = ({
   );
 };
 
-
 // Helpers
 function formatNumber(num: number) {
   if (num >= 1_000_000) {
@@ -928,7 +882,6 @@ function formatNumber(num: number) {
   return num.toString();
 }
 
-
 function formatDate(dateString: string) {
   return new Date(dateString).toLocaleDateString('en-US', {
     year: 'numeric',
@@ -936,6 +889,5 @@ function formatDate(dateString: string) {
     day: 'numeric'
   });
 }
-
 
 export default Superadmin
