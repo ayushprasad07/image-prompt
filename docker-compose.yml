@@ -26,6 +26,7 @@ services:
       - image-prompt-network
     volumes:
       - uploads:/uploads
+    command: sh -c "chown -R nextjs:nodejs /app/public/uploads && node server.js"
 
   nginx:
     image: nginx:alpine
