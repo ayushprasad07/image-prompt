@@ -364,15 +364,17 @@ export async function POST(req: Request) {
 
     const buffer = Buffer.from(await image.arrayBuffer());
 
-    // 📌 Create per-admin upload folder
-    const uploadDir = path.join(process.cwd(), "public", "uploads", adminId.toString());
+    // 📌 Use Docker volume path
+    const uploadDir = path.join("/uploads", adminId.toString());
     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
     const filename = `${Date.now()}-${image.name.replace(/[^a-zA-Z0-9_.-]/g, "_")}`;
     const filepath = path.join(uploadDir, filename);
     fs.writeFileSync(filepath, buffer);
 
-    const publicUrl = `/uploads/${adminId}/${filename}`; // store this in DB
+    // URL stored in DB stays the same
+    const publicUrl = `/uploads/${adminId}/${filename}`;
+
 
 
     // Save DB entry

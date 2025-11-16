@@ -27,10 +27,10 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 # Create uploads directory
-RUN mkdir -p /app/public/uploads
+RUN mkdir -p /uploads
 
 # Make it writable by the nextjs user
-RUN chown nextjs:nodejs /app/public/uploads
+RUN chown nextjs:nodejs /uploads
 
 # Copy built app from builder
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
