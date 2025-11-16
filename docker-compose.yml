@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   nextjs-app:
+    user: root
     build:
       context: .
       dockerfile: Dockerfile
@@ -24,7 +25,7 @@ services:
     networks:
       - image-prompt-network
     volumes:
-      - uploads:/app/uploads
+      - uploads:/uploads
 
   nginx:
     image: nginx:alpine
