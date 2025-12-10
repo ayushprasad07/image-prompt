@@ -178,6 +178,95 @@ export const config = {
   },
 };
 
+// export async function POST(req: Request) {
+//   await dbConnect();
+//   const session = await getServerSession(authOptions);
+
+//   const admin: User = session?.user as User;
+
+//   if (!admin || admin.role !== "admin") {
+//     return Response.json(
+//       { success: false, message: "Unauthorized" },
+//       { status: 401 }
+//     );
+//   }
+
+//   const adminId = new mongoose.Types.ObjectId(admin._id);
+//   const lockKey = `upload-lock:${adminId}`;
+//   let lock;
+
+//   try {
+//     lock = await redlock.acquire([lockKey], 30_000);
+
+//     const formData = await req.formData();
+//     const image = formData.get("image") as File | null;
+//     const prompt = formData.get("prompt") as string;
+//     const categoryId = formData.get("categoryId") as string;
+//     const tagsRaw = formData.get("tags") as string | null; // ✅ Get tags field
+
+//     if (!image || !prompt || !categoryId) {
+//       return Response.json(
+//         { success: false, message: "Missing required fields" },
+//         { status: 400 }
+//       );
+//     }
+
+//     // ✅ Parse tags (comma separated or JSON)
+//     let tags: string[] = [];
+//     if (tagsRaw) {
+//       try {
+//         if (tagsRaw.startsWith("[")) {
+//           // JSON array string like ["tag1","tag2"]
+//           tags = JSON.parse(tagsRaw);
+//         } else {
+//           // Comma separated string like "tag1,tag2"
+//           tags = tagsRaw.split(",").map((t) => t.trim()).filter(t => t.length > 0);
+//         }
+//       } catch (e) {
+//         console.warn("Invalid tags format, skipping...");
+//       }
+//     }
+
+//     const buffer = Buffer.from(await image.arrayBuffer());
+
+//     // Use consistent upload path that matches nginx serving
+//     const uploadDir = path.join(process.cwd(), "public", "uploads", adminId.toString());
+//     if (!fs.existsSync(uploadDir)) {
+//       fs.mkdirSync(uploadDir, { recursive: true });
+//     }
+
+//     const filename = `${Date.now()}-${image.name.replace(/[^a-zA-Z0-9_.-]/g, "_")}`;
+//     const filepath = path.join(uploadDir, filename);
+//     fs.writeFileSync(filepath, buffer);
+
+//     // ✅ Use absolute URL instead of relative
+//     const publicUrl = `https://admin.novaprompt.in/uploads/${adminId}/${filename}`;
+
+//     // Save DB entry with tags
+//     await new Work({
+//       adminId,
+//       prompt,
+//       imageUrl: publicUrl,
+//       categoryId: new mongoose.Types.ObjectId(categoryId),
+//       tags, // ✅ Save tags array
+//     }).save();
+
+//     return Response.json({
+//       success: true,
+//       message: "Work created",
+//       imageUrl: publicUrl,
+//     });
+//   } catch (err) {
+//     console.error("Upload error:", err);
+//     return Response.json(
+//       { success: false, message: "Upload failed or locked" },
+//       { status: 429 }
+//     );
+//   } finally {
+//     if (lock) await redlock.release(lock).catch(() => {});
+//   }
+// }
+
 export async function POST(req: Request) {
   await dbConnect();
   const session = await getServerSession(authOptions);
@@ -202,7 +291,7 @@ export async function POST(req: Request) {
     const image = formData.get("image") as File | null;
     const prompt = formData.get("prompt") as string;
     const categoryId = formData.get("categoryId") as string;
-    const tagsRaw = formData.get("tags") as string | null; // ✅ Get tags field
+    const tagsRaw = formData.get("tags") as string | null;
 
     if (!image || !prompt || !categoryId) {
       return Response.json(
@@ -211,44 +300,43 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ Parse tags (comma separated or JSON)
+    // ✅ Parse tags
     let tags: string[] = [];
     if (tagsRaw) {
       try {
         if (tagsRaw.startsWith("[")) {
-          // JSON array string like ["tag1","tag2"]
           tags = JSON.parse(tagsRaw);
         } else {
-          // Comma separated string like "tag1,tag2"
-          tags = tagsRaw.split(",").map((t) => t.trim()).filter(t => t.length > 0);
+          tags = tagsRaw.split(",").map((t) => t.trim());
         }
-      } catch (e) {
-        console.warn("Invalid tags format, skipping...");
-      }
+      } catch {}
     }
 
     const buffer = Buffer.from(await image.arrayBuffer());
 
-    // Use consistent upload path that matches nginx serving
-    const uploadDir = path.join(process.cwd(), "public", "uploads", adminId.toString());
+    // ✅ ABSOLUTE VOLUME PATH (CRITICAL FIX)
+    const BASE_UPLOAD_PATH = "/app/public/uploads";
+    const uploadDir = path.join(BASE_UPLOAD_PATH, adminId.toString());
+
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
 
     const filename = `${Date.now()}-${image.name.replace(/[^a-zA-Z0-9_.-]/g, "_")}`;
     const filepath = path.join(uploadDir, filename);
+
+    // ✅ WRITE TO VPS DISK
     fs.writeFileSync(filepath, buffer);
 
-    // ✅ Use absolute URL instead of relative
+    // ✅ Public URL
     const publicUrl = `https://admin.novaprompt.in/uploads/${adminId}/${filename}`;
 
-    // Save DB entry with tags
     await new Work({
       adminId,
       prompt,
       imageUrl: publicUrl,
       categoryId: new mongoose.Types.ObjectId(categoryId),
-      tags, // ✅ Save tags array
+      tags,
     }).save();
 
     return Response.json({
